@@ -19,7 +19,7 @@ type Summary = {
   covered_vendor_cost: Amount; covered_selling: Amount; covered_simulated_gross_profit: Amount;
   covered_simulated_gross_margin_pct: Amount; billing_status: string;
 };
-type Session = { authenticated:boolean; configured:boolean; demo:boolean; importEnabled:boolean };
+type Session = { authenticated:boolean; configured:boolean; demo:boolean; importEnabled:boolean; maxUploadBytes?:number; deployment?:string };
 type RatedCdr = {
   miitel_cdr_id:string; source_reference:string; source_row_number:number; call_direction:string;
   call_outcome:string; call_duration_seconds:number|null; origin_type_code:string|null; destination_code:string|null;
@@ -51,7 +51,7 @@ async function request<T>(url:string, options:RequestInit={}):Promise<T>{
 
 function Brand({light=false}:{light?:boolean}){
   return <div className={'brand '+(light?'brand-light':'')}>
-    <div className="brand-symbol"><svg viewBox="0 0 40 40" fill="none"><path d="M8 27l8-15 6 11 6-11 6 15" stroke="currentColor" strokeWidth="4.2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="21" cy="31" r="2" fill="currentColor"/></svg></div>
+    <div className="brand-symbol"><img src="/miitel-symbol.png" alt="MiiTel"/></div>
     <div><div className="brand-name">Call<span>Meter</span></div><div className="brand-subtitle">MIITEL • REVCOMM</div></div>
   </div>;
 }
@@ -68,7 +68,7 @@ function Login({configured,onLogin}:{configured:boolean;onLogin:()=>void}){
   }
   return <main className="login-page">
     <section className="login-art"><Brand light/><div className="login-art-content"><div className="login-kicker">CALL CHARGE INTELLIGENCE</div><h1>Every call.<br/>Every charge.<br/><span>Clearly accounted for.</span></h1><p>A focused workspace for MiiTel CDR processing, rating and billing insights.</p><div className="login-orbit"><PhoneCall size={72} strokeWidth={1.3}/></div></div><div className="login-footnote"><ShieldCheck size={17}/> Private team workspace</div></section>
-    <section className="login-form-area"><div className="login-card"><div className="login-icon"><LockKeyhole size={26}/></div><h2>Welcome back</h2><p>Enter your workspace access key to continue.</p>
+    <section className="login-form-area"><div className="login-card"><img className="login-miitel-wordmark" src="/miitel-wordmark.png" alt="MiiTel"/><div className="login-icon"><LockKeyhole size={26}/></div><h2>Welcome back</h2><p>Enter your workspace access key to continue.</p>
       {!configured&&<ErrorBox message="Application access is not configured. Set the server environment variables first."/>}
       {error&&<ErrorBox message={error}/>}
       <form onSubmit={submit}><label htmlFor="access">Workspace access key</label><input id="access" type="password" autoComplete="current-password" placeholder="Enter your access key" value={token} onChange={e=>setToken(e.target.value)} required/><button className="primary-button full-width" disabled={busy||!configured||!token}>{busy?<Spinner/>:'Sign in'}</button></form>
@@ -142,10 +142,11 @@ function CdrExplorer({companies,company,demo}:{companies:string[];company:string
 }
 
 type UploadPreview={companyKey:string;sourceReference:string;cdrCount:number;byDirection:{inbound:number;outbound:number;internal:number};missingCharge:number;sourceCharge:string};
-function Upload({company,importEnabled,demo,onComplete}:{company:string;importEnabled:boolean;demo:boolean;onComplete:()=>void}){
+function Upload({company,importEnabled,demo,maxUploadBytes,onComplete}:{company:string;importEnabled:boolean;demo:boolean;maxUploadBytes:number;onComplete:()=>void}){
   const [key,setKey]=useState(company!=='all'?company:'');
   const [file,setFile]=useState<File|null>(null),[drag,setDrag]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[preview,setPreview]=useState<UploadPreview|null>(null),[message,setMessage]=useState('');
-  function selectFile(f?:File){setError('');setPreview(null);setMessage('');if(!f)return;setFile(null);if(!/\.(xlsx|csv)$/i.test(f.name)){setError('Choose an XLSX or CSV file.');return;}if(f.size>32*1024*1024){setError('Maximum file size is 32 MB.');return;}setFile(f);}
+  const uploadLimitMb=Math.floor(maxUploadBytes/1024/1024);
+  function selectFile(f?:File){setError('');setPreview(null);setMessage('');if(!f)return;setFile(null);if(!/\.(xlsx|csv)$/i.test(f.name)){setError('Choose an XLSX or CSV file.');return;}if(f.size>maxUploadBytes){setError(`Maximum file size for this deployment is ${uploadLimitMb} MB.`);return;}setFile(f);}
   async function send(mode:'preview-upload'|'import-upload'){
     if(!file||!key){setError('Choose a company and CDR file.');return;}
     setBusy(true);setError('');setMessage('');
@@ -155,7 +156,7 @@ function Upload({company,importEnabled,demo,onComplete}:{company:string;importEn
     }catch(err){setError(err instanceof Error?err.message:'Upload failed')}finally{setBusy(false);}
   }
   return <div className="page-stack"><div className="page-intro"><div><h1>Upload MiiTel CDR</h1><p>Validate a source file before importing it to CallMeter.</p></div><span className="badge blue"><FileSpreadsheet size={15}/> Excel / CSV</span></div>
-    <section className="card upload-card"><div className="card-title"><div><h3>CDR source file</h3><p>Original MiiTel export; duplicate worksheets are ignored.</p></div><div className="small-icon"><CloudUpload size={23}/></div></div><div className="field"><label htmlFor="company-key">MiiTel company key</label><input id="company-key" value={key} onChange={e=>{setKey(e.target.value);setPreview(null)}} placeholder="e.g. company-id"/></div><div className={'dropzone '+(drag?'dragging':'')} onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);selectFile(e.dataTransfer.files[0])}}><div className="upload-circle"><CloudUpload size={34} strokeWidth={1.7}/></div><h3>{file?file.name:'Drag and drop your CDR file'}</h3><p>{file?(file.size/1024/1024).toFixed(2)+' MB':'XLSX or CSV, up to 32 MB'}</p><label className="outline-button file-button">Choose file<input type="file" accept=".xlsx,.csv" onChange={e=>selectFile(e.target.files?.[0])}/></label>{file&&<button className="text-button" onClick={()=>{setFile(null);setPreview(null)}}>Remove</button>}</div>
+    <section className="card upload-card"><div className="card-title"><div><h3>CDR source file</h3><p>Original MiiTel export; duplicate worksheets are ignored.</p></div><div className="small-icon"><CloudUpload size={23}/></div></div><div className="field"><label htmlFor="company-key">MiiTel company key</label><input id="company-key" value={key} onChange={e=>{setKey(e.target.value);setPreview(null)}} placeholder="e.g. company-id"/></div><div className={'dropzone '+(drag?'dragging':'')} onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);selectFile(e.dataTransfer.files[0])}}><div className="upload-circle"><CloudUpload size={34} strokeWidth={1.7}/></div><h3>{file?file.name:'Drag and drop your CDR file'}</h3><p>{file?(file.size/1024/1024).toFixed(2)+' MB':`XLSX or CSV, up to ${uploadLimitMb} MB`}</p><label className="outline-button file-button">Choose file<input type="file" accept=".xlsx,.csv" onChange={e=>selectFile(e.target.files?.[0])}/></label>{file&&<button className="text-button" onClick={()=>{setFile(null);setPreview(null)}}>Remove</button>}</div>
     {error&&<ErrorBox message={error}/>}
     <div className="upload-actions"><span><ShieldCheck size={16}/> Preview does not save data.</span><button className="primary-button" disabled={busy||!file||!key||demo} onClick={()=>send('preview-upload')}>{busy?<Spinner/>:<><CheckCircle2 size={18}/> Preview file</>}</button></div>
     {demo&&<div className="chart-note">Local design demo: configure the live backend to process uploads.</div>}
@@ -181,7 +182,7 @@ function Workspace({session,onExit}:{session:Session;onExit:()=>void}){
     <div className="main-shell"><header className="topbar"><div className="topbar-left"><button className="icon-button mobile-menu" aria-label="Open navigation" onClick={()=>setMobileOpen(true)}><Menu size={24}/></button><span className="breadcrumbs">CallMeter <span>/</span> <strong>{pageNames[page]}</strong></span></div><div className="topbar-right"><div className="mode-pill"><ShieldCheck size={16}/><span>{session.demo?'Demo data':'Simulation'}</span></div><button className="icon-button refresh-button" title="Refresh data" aria-label="Refresh data" onClick={refresh}><RefreshCw size={20} className={loading?'spin':''}/></button><div className="profile-avatar">CM</div></div></header><main className="content"><div className="toolbar"><div><span className="eyebrow">MIITEL CALLMETER</span><h2>{pageNames[page]}</h2></div><div className="company-control"><Building2 size={18}/><select aria-label="Filter customer" value={company} onChange={e=>setCompany(e.target.value)}><option value="all">All customers</option>{companies.map(c=><option key={c}>{c}</option>)}</select><ChevronDown size={16}/></div></div>
       {page==='overview'&&<Overview rows={filtered} loading={loading} error={error} company={company} demo={session.demo} onRetry={refresh} onExplore={c=>{setCompany(c);go('cdrs')}}/>}
       {page==='cdrs'&&<CdrExplorer companies={companies} company={company} demo={session.demo}/>}
-      {page==='upload'&&<Upload company={company} importEnabled={session.importEnabled} demo={session.demo} onComplete={refresh}/>}
+      {page==='upload'&&<Upload company={company} importEnabled={session.importEnabled} demo={session.demo} maxUploadBytes={session.maxUploadBytes??32*1024*1024} onComplete={refresh}/>}
       <footer className="app-footer"><span>MiiTel CallMeter · Call charge management</span><span>Preview only · No invoice posting</span></footer>
     </main></div>
   </div>;

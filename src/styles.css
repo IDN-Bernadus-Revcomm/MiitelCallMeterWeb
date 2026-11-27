@@ -21,8 +21,8 @@ svg { flex-shrink: 0; }
 .app-shell { min-height: 100vh; }
 .sidebar { width: 240px; height: 100vh; background: #fff; border-right: 1px solid #e5edf2; position: fixed; z-index: 30; display:flex; flex-direction:column; padding:28px 18px 18px; }
 .brand { display:flex; align-items:center; gap:11px; padding:0 7px; color:#152f43; }
-.brand-symbol { width:45px; height:45px; border-radius:14px; padding:4px; background:#0ea5e9; color:#fff; box-shadow:0 8px 16px #0ea5e92c; }
-.brand-symbol svg { width:100%; height:100%; }
+.brand-symbol { width:49px; height:49px; border-radius:13px; padding:2px; background:#fff; box-shadow:0 5px 15px #0ea5e914; border:1px solid #e2edf3; overflow:hidden; display:grid; place-items:center; }
+.brand-symbol img { width:100%; height:100%; object-fit:contain; display:block; }
 .brand-name { font-size:23px; font-weight:760; letter-spacing:-1.3px; line-height:1.02; }
 .brand-name span { color:#0aa2e4; }
 .brand-subtitle { font-size:10px; font-weight:760; color:#8a9dab; letter-spacing:1.3px; margin-top:6px; }
@@ -174,7 +174,7 @@ td strong { font-weight:700; color:#293f51; }
 .boot-screen { min-height:100vh; display:flex; justify-content:center; align-items:center; gap:24px; flex-direction:column; padding:20px; background:#f1f7fb; }
 .login-page { min-height:100vh; display:grid; grid-template-columns:1.08fr 1fr; background:#f8fbfd; }
 .login-art { min-height:100vh; display:flex; flex-direction:column; overflow:hidden; background:linear-gradient(145deg,#069edf 0%,#168eca 55%,#176b9e 100%); color:white; padding:45px 50px; position:relative; }
-.brand-light .brand-symbol { background:#ffffff28; box-shadow:none; }
+.brand-light .brand-symbol { background:#fff; box-shadow:none; border:0; }
 .brand-light .brand-name,.brand-light .brand-name span { color:#fff; }
 .brand-light .brand-subtitle { color:#d0f1ff; }
 .login-art-content { position:relative; flex:1; display:flex; flex-direction:column; justify-content:center; }
@@ -187,6 +187,7 @@ td strong { font-weight:700; color:#293f51; }
 .login-form-area { display:flex; justify-content:center; align-items:center; padding:36px; }
 .login-card { width:100%; max-width:415px; background:white; border:1px solid #e2edf5; border-radius:20px; padding:37px; box-shadow:0 12px 50px #244b6410; }
 .login-icon { background:#e5f5ff; color:#0a9cde; height:51px; width:51px; border-radius:14px; display:grid; place-items:center; margin-bottom:20px; }
+.login-miitel-wordmark { display:block; width:126px; height:auto; margin:0 0 19px; }
 .login-card h2 { font-size:29px; color:#2a4153; letter-spacing:-.85px; font-weight:780; margin:0 0 9px; }
 .login-card>p { color:#748b9b; font-size:14px; line-height:1.5; margin:0 0 25px; }
 .login-card form { display:flex; flex-direction:column; gap:10px; }

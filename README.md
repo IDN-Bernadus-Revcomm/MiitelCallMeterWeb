@@ -31,6 +31,30 @@ HttpOnly sessions. Configure identity-based user authorization before
 production use. The dashboard clearly labels database results as simulations.
 Import is disabled initially and must be enabled explicitly on both services.
 
+## Deploy to Vercel
+
+Use the **Vite** framework preset. The repository includes `vercel.json`
+and real Vercel Functions under `api/`, so login and the private backend proxy
+work on Vercel without running an Express listener.
+
+Set the following in Vercel Project Settings > Environment Variables
+for the Production environment, then redeploy:
+
+- `BACKEND_URL=https://miitelcallmeterapi.onrender.com`
+- `BACKEND_API_TOKEN`: the existing Render API_TOKEN, server-side only
+- `APP_ACCESS_TOKEN`: separate random access key, minimum 32 characters
+- `ENABLE_CDR_IMPORT=false`
+
+Do not prefix secrets with `VITE_`. Check `/api/session`: the route should
+return JSON with `configured: true` before signing in.
+
+Vercel Functions have a default request body limit of 4.5 MB. The upload UI
+uses a safe 4 MB file limit there. Where the platform's larger-body beta and
+required performance memory setting are available, enable
+`VERCEL_SUPPORT_LARGE_REQUEST_BODY=1`; the UI then uses a 19 MB file limit.
+For larger CDR files or plans without that option, use the Render Node
+deployment with its existing 32 MB limit.
+
 ## Local development
 
 ```sh

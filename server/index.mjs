@@ -39,7 +39,7 @@ function sameOrigin(req,res,next){
   next();
 }
 app.get('/health',(_req,res)=>res.json({status:'ok',configured,ratingMode:'SIMULATION_ONLY'}));
-app.get('/api/session',(req,res)=>res.json({authenticated:signedIn(req),configured:configured||demo,demo,importEnabled}));
+app.get('/api/session',(req,res)=>res.json({authenticated:signedIn(req),configured:configured||demo,demo,importEnabled,maxUploadBytes:32*1024*1024,deployment:'node'}));
 app.post('/api/auth/login',sameOrigin,(req,res)=>{
   if(!configured)return res.status(503).json({message:'Application access is not configured'});
   const key=req.ip||'unknown', now=Date.now();
