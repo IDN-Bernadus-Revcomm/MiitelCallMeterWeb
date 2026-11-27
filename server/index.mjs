@@ -42,7 +42,7 @@ function sameOrigin(req,res,next){
   next();
 }
 app.get('/health',(_req,res)=>res.json({status:'ok',configured,ratingMode:'SIMULATION_ONLY'}));
-app.get('/api/session',(req,res)=>res.json({authenticated:signedIn(req),configured:configured||demo,demo,importEnabled,masterWriteEnabled:!demo&&adminIn(req),maxUploadBytes:32*1024*1024,deployment:'node'}));
+app.get('/api/session',(req,res)=>res.json({authenticated:signedIn(req),configured:configured||demo,demo,importEnabled:importEnabled&&adminIn(req),masterWriteEnabled:!demo&&adminIn(req),maxUploadBytes:32*1024*1024,directUploadBase:null,deployment:'node'}));
 app.post('/api/auth/login',sameOrigin,(req,res)=>{
   if(!configured)return res.status(503).json({message:'Application access is not configured'});
   const key=req.ip||'unknown', now=Date.now();
@@ -128,6 +128,11 @@ app.get('/api/master/number-details',requireAuth,(req,res)=>{
 });
 app.get('/api/master/workspace',requireAuth,(req,res)=>{
   const resource=req.query.resource;
+  if(resource==='import-history'){
+    if(demo)return res.json({rows:[],hasMore:false,historyReady:false});
+    const qs=new URLSearchParams();for(const key of ['company','q','status','limit','offset'])if(typeof req.query[key]==='string')qs.set(key,req.query[key]);
+    return proxy(res,'cdr/import-history?'+qs);
+  }
   if(!['number-options','area-options','catalog','pricing-options','pricing-record','active-cdrs'].includes(resource))return res.status(405).json({message:'Method not allowed'});
   if(demo)return res.json(resource==='catalog'||resource==='active-cdrs'?{rows:[],hasMore:false}:resource==='area-options'?[]:resource==='pricing-record'?null:{vendors:[],types:[],countries:[],variants:[],grades:[],customers:[],teams:[],migrationOptions:[],destinations:[],zones:[],numbers:[],areas:[],sources:[],standard:[],draftProtectionReady:false});
   const qs=new URLSearchParams();for(const key of ['q','country','kind','status','limit','offset','id','company','assume_jakarta','direction'])if(typeof req.query[key]==='string')qs.set(key,req.query[key]);
@@ -138,15 +143,16 @@ app.post('/api/master/workspace',sameOrigin,requireAuth,(req,res)=>{
   if(!['number-actions','vendor-save','pricing-save','pricing-lifecycle','rating-simulate'].includes(req.query.resource))return res.status(405).json({message:'Method not allowed'});
   return proxy(res,'master/'+req.query.resource,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(req.body)});
 });
-const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:32*1024*1024,files:1,fields:2}});
+const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:32*1024*1024,files:1,fields:4}});
 function uploadProxy(mode){
   return (req,res)=>{
     if(demo)return res.status(503).json({message:'Connect the live API to preview an upload'});
-    if(mode==='import-upload' && !importEnabled)return res.status(403).json({message:'Import is disabled for this deployment'});
+    if(mode==='import-upload' && (!importEnabled||!adminIn(req)))return res.status(403).json({message:'Admin access and enabled import are required'});
     if(!req.file || !req.body?.companyKey || !/^[a-z0-9][a-z0-9._-]{0,99}$/i.test(req.body.companyKey))
       return res.status(400).json({message:'Company key and CDR file required'});
     const form=new FormData();
     form.append('companyKey',req.body.companyKey);
+    for(const key of ['sourceTimezone','sourceCurrency','previewHash'])if(typeof req.body[key]==='string')form.append(key,req.body[key]);
     form.append('file',new Blob([req.file.buffer]),req.file.originalname);
     return proxy(res,'cdr/'+mode,{method:'POST',body:form});
   };

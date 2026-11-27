@@ -79,6 +79,14 @@ test('Vercel endpoints provide authenticated server-side proxy, never a client t
     assert.equal((await masterWorkspace.fetch(new Request(ratingUrl,{method:'POST',headers:{cookie:signedCookie,'Content-Type':'application/json'},body:'{}'}))).status,200);
     globalThis.fetch=async(url,options)=>{assert.equal(url.href,'https://api.example.test/master/active-cdrs?limit=25&company=demo-company&assume_jakarta=false');assert.equal(options.method,undefined);return Response.json({rows:[],hasMore:false});};
     assert.equal((await masterWorkspace.fetch(new Request(base+'/api/master/workspace?resource=active-cdrs&company=demo-company&limit=25&assume_jakarta=false',{headers:{cookie:signedCookie}}))).status,200);
+    globalThis.fetch=async(url)=>{assert.equal(url.href,'https://api.example.test/cdr/import-history?company=demo-company&limit=25');return Response.json({rows:[],hasMore:false,historyReady:true});};
+    assert.equal((await masterWorkspace.fetch(new Request(base+'/api/master/workspace?resource=import-history&company=demo-company&limit=25',{headers:{cookie:signedCookie}}))).status,200);
+    const prod='https://miitel-call-meter-web.vercel.app';process.env.BACKEND_URL='https://miitelcallmeterapi.onrender.com';process.env.ENABLE_CDR_IMPORT='true';
+    const directState=await (await session.fetch(new Request(prod+'/api/session',{headers:{cookie:adminCookie}}))).json();assert.equal(directState.directUploadBase,'https://miitelcallmeterapi.onrender.com');assert.equal(directState.importEnabled,true);
+    const permitUrl=prod+'/api/master/workspace?resource=cdr-upload-permit';const permitBody={mode:'import-upload',companyKey:'demo-company',filename:'demo.xlsx',size:8000000,origin:'https://wrong.example'};
+    assert.equal((await masterWorkspace.fetch(new Request(permitUrl,{method:'POST',headers:{cookie:signedCookie,'Content-Type':'application/json'},body:JSON.stringify(permitBody)}))).status,403);
+    globalThis.fetch=async(url,options)=>{assert.equal(url.href,'https://miitelcallmeterapi.onrender.com/cdr/upload-permit');assert.equal(JSON.parse(options.body).origin,prod);assert.equal(options.headers.Authorization,'Bearer '+backend);return Response.json({token:'mock-upload-permit'});};
+    const permit=await masterWorkspace.fetch(new Request(permitUrl,{method:'POST',headers:{cookie:adminCookie,origin:prod,'Content-Type':'application/json'},body:JSON.stringify(permitBody)}));assert.equal(permit.status,200);assert.deepEqual(await permit.json(),{token:'mock-upload-permit'});
     assert.equal((await masterWorkspace.fetch(new Request(base+'/api/master/workspace?resource=unknown',{headers:{cookie:adminCookie}}))).status,405);
     const signedOut=await logout.fetch(new Request(base+'/api/auth/logout',{method:'POST',headers:{origin:base,cookie:signedCookie}}));
     assert.ok(signedOut.headers.get('Set-Cookie').includes('Max-Age=0'));

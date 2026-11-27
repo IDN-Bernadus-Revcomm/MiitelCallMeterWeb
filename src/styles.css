@@ -121,6 +121,8 @@ svg { flex-shrink: 0; }
 .customer-form-grid input:read-only { background:#f5f9fc; color:#718593; }
 .customer-meta { display:flex; flex-wrap:wrap; gap:12px; color:#65798a; font-size:14px; margin:16px 0; }
 .upload-card .customer-picker { max-width:100%; }
+.upload-metadata { margin:0 0 8px; }
+.upload-metadata-note { margin:0 0 16px; }
 .customer-picker .outline-button { align-self:flex-start; }
 .number-detail-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:18px; }
 .number-detail-grid>div { display:flex; flex-direction:column; gap:5px; border:1px solid var(--border); padding:12px; border-radius:9px; }

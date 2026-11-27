@@ -68,11 +68,14 @@ Do not prefix secrets with `VITE_`. Check `/api/session`: the route should
 return JSON with `configured: true` before signing in.
 
 Vercel Functions have a default request body limit of 4.5 MB. The upload UI
-uses a safe 4 MB file limit there. Where the platform's larger-body beta and
-required performance memory setting are available, enable
-`VERCEL_SUPPORT_LARGE_REQUEST_BODY=1`; the UI then uses a 19 MB file limit.
-For larger CDR files or plans without that option, use the Render Node
-deployment with its existing 32 MB limit.
+uses same-origin proxy uploads up to 4 MB; larger files up to 32 MB are sent
+directly to the existing Render API on the production CallMeter domain with a
+short-lived, scope-bound upload permit (the backend API token stays server-side).
+The explicit source timezone/currency and previewed file hash accompany import.
+To enable real imports, apply migration 010B, set backend
+`CDR_IMPORT_ENABLED=true` and frontend `ENABLE_CDR_IMPORT=true`, then sign in
+as admin. Import History lists completed and rolled-back batch attempts and
+legacy stored CDR groups. No final billing or invoice is posted by import.
 
 ## Local development
 

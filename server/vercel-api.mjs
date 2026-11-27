@@ -26,6 +26,9 @@ function config(){
     maxUploadBytes:process.env.VERCEL_SUPPORT_LARGE_REQUEST_BODY==='1' ? 19*1024*1024 : 4*1024*1024
   };
 }
+function directUploadBase(cfg,origin){
+  try{const backend=new URL(cfg.backend);return origin==='https://miitel-call-meter-web.vercel.app'&&backend.origin==='https://miitelcallmeterapi.onrender.com'&&!backend.username&&!backend.password?backend.origin:null;}catch{return null;}
+}
 async function proxy(cfg,path,options={}){
   try{
     const destination=new URL(path,cfg.backend.endsWith('/')?cfg.backend:cfg.backend+'/');
@@ -54,7 +57,7 @@ export async function handleVercelRequest(request,route){
   if(isPost&&origin&&origin!==url.origin)return reply({message:'Origin not allowed'},403);
   if(route==='session'&&request.method==='GET')return reply({
     authenticated:authed,configured:cfg.configured,demo:false, masterWriteEnabled:isAdmin,
-    importEnabled:cfg.importEnabled,maxUploadBytes:cfg.maxUploadBytes,deployment:'vercel'
+    importEnabled:cfg.importEnabled&&isAdmin,maxUploadBytes:cfg.maxUploadBytes,directUploadBase:authed?directUploadBase(cfg,url.origin):null,deployment:'vercel'
   });
   if(route==='health'&&request.method==='GET')return reply({status:'ok',configured:cfg.configured,ratingMode:'SIMULATION_ONLY'});
   if(route==='login'&&isPost){
@@ -77,6 +80,16 @@ export async function handleVercelRequest(request,route){
   if(!authed)return reply({message:'Please sign in'},401);
   if(route==='master-workspace'){
     const resource=url.searchParams.get('resource');
+    if(resource==='cdr-upload-permit'&&isPost){
+      if(!directUploadBase(cfg,url.origin))return reply({message:'Direct upload is unavailable on this deployment'},403);
+      const body=await request.json().catch(()=>null);if(!body||typeof body!=='object'||Array.isArray(body))return reply({message:'Invalid upload request'},400);
+      if(body.mode==='import-upload'&&(!isAdmin||!cfg.importEnabled))return reply({message:'Admin access and enabled import are required'},403);
+      return proxy(cfg,'cdr/upload-permit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,origin:url.origin})});
+    }
+    if(resource==='import-history'&&request.method==='GET'){
+      const query=new URLSearchParams();for(const key of ['company','q','status','limit','offset']){const value=url.searchParams.get(key);if(value!==null)query.set(key,value);}
+      return proxy(cfg,'cdr/import-history?'+query);
+    }
     if(['number-actions','vendor-save','pricing-save','pricing-lifecycle','rating-simulate'].includes(resource)&&isPost){
       if(resource!=='rating-simulate'&&!isAdmin)return reply({message:'Admin access required'},403);
       const body=await request.json().catch(()=>null);if(!body||typeof body!=='object'||Array.isArray(body))return reply({message:'Invalid number data'},400);
@@ -114,13 +127,14 @@ export async function handleVercelRequest(request,route){
     return proxy(cfg,'call-charge/cdrs?'+query);
   }
   if((route==='preview-upload'||route==='import-upload')&&isPost){
-    if(route==='import-upload'&&!cfg.importEnabled)return reply({message:'Import is disabled for this deployment'},403);
+    if(route==='import-upload'&&(!cfg.importEnabled||!isAdmin))return reply({message:'Admin access and enabled import are required'},403);
     const form=await request.formData().catch(()=>null);
     const file=form?.get('file'),company=form?.get('companyKey');
     if(!(file instanceof File)||typeof company!=='string'||!/^[a-z0-9][a-z0-9._-]{0,99}$/i.test(company))
       return reply({message:'Company key and CDR file required'},400);
     if(file.size>cfg.maxUploadBytes)return reply({message:'File exceeds this deployment upload limit'},413);
     const outgoing=new FormData();outgoing.append('companyKey',company);outgoing.append('file',file,file.name);
+    for(const key of ['sourceTimezone','sourceCurrency','previewHash']){const value=form.get(key);if(typeof value==='string')outgoing.append(key,value);}
     return proxy(cfg,'cdr/'+route,{method:'POST',body:outgoing});
   }
   return reply({message:'Method not allowed'},405);
