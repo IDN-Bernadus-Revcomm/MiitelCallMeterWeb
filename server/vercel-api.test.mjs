@@ -72,6 +72,13 @@ test('Vercel endpoints provide authenticated server-side proxy, never a client t
     assert.equal((await masterWorkspace.fetch(new Request(pricingUrl,{method:'POST',headers:{cookie:signedCookie,'Content-Type':'application/json'},body:'{}'}))).status,403);
     globalThis.fetch=async(url,options)=>{assert.equal(url.href,'https://api.example.test/master/pricing-save');assert.equal(options.method,'POST');return Response.json({id:'demo',status:'inactive'});};
     assert.equal((await masterWorkspace.fetch(new Request(pricingUrl,{method:'POST',headers:{cookie:adminCookie,'Content-Type':'application/json'},body:'{}'}))).status,200);
+    const lifecycleUrl=base+'/api/master/workspace?resource=pricing-lifecycle';
+    assert.equal((await masterWorkspace.fetch(new Request(lifecycleUrl,{method:'POST',headers:{cookie:signedCookie,'Content-Type':'application/json'},body:'{}'}))).status,403);
+    globalThis.fetch=async(url,options)=>{assert.equal(url.href,'https://api.example.test/master/rating-simulate');assert.equal(options.method,'POST');return Response.json({result:{status:'unrated'}});};
+    const ratingUrl=base+'/api/master/workspace?resource=rating-simulate';
+    assert.equal((await masterWorkspace.fetch(new Request(ratingUrl,{method:'POST',headers:{cookie:signedCookie,'Content-Type':'application/json'},body:'{}'}))).status,200);
+    globalThis.fetch=async(url,options)=>{assert.equal(url.href,'https://api.example.test/master/active-cdrs?limit=25&company=demo-company&assume_jakarta=false');assert.equal(options.method,undefined);return Response.json({rows:[],hasMore:false});};
+    assert.equal((await masterWorkspace.fetch(new Request(base+'/api/master/workspace?resource=active-cdrs&company=demo-company&limit=25&assume_jakarta=false',{headers:{cookie:signedCookie}}))).status,200);
     assert.equal((await masterWorkspace.fetch(new Request(base+'/api/master/workspace?resource=unknown',{headers:{cookie:adminCookie}}))).status,405);
     const signedOut=await logout.fetch(new Request(base+'/api/auth/logout',{method:'POST',headers:{origin:base,cookie:signedCookie}}));
     assert.ok(signedOut.headers.get('Set-Cookie').includes('Max-Age=0'));

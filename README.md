@@ -42,7 +42,13 @@ supports registration, lifecycle updates, assign/release, and translation
 creation/closure using the existing database triggers. Vendor profiles are
 editable; call rate cards and customer discounts can be registered as inactive
 drafts or new revisions after the database guard migration 010A is applied.
-Existing rate records remain unchanged. Activation is not exposed.
+Existing rate records remain unchanged when creating drafts. Admins can
+explicitly publish vendor and selling drafts, replace a single overlapping
+earlier exact-scope rate, or end a rate's effective period without rewriting
+historical pricing. The Rating Simulation uses the existing active-rate engine;
+customer discount approval still needs individual user identity.
+CDR Explorer also provides a separate Active Rate Preview, bounded to 25 CDRs
+per page; it does not rewrite the historical simulation or save rating results.
 
 ## Deploy to Vercel
 

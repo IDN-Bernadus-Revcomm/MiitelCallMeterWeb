@@ -9,9 +9,11 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { NumberCreate,NumberAdminActions,NumberFilters } from './number-workspace';
 import { CatalogWorkspace,type CatalogKind } from './catalog-workspace';
+import { RatingSimulation } from './rating-simulation';
+import { ActiveCdrPreview } from './active-cdr-preview';
 import './styles.css';
 
-type Page = 'overview' | 'cdrs' | 'upload' | 'customers' | 'numbers' | CatalogKind;
+type Page = 'overview' | 'cdrs' | 'upload' | 'customers' | 'numbers' | 'rating-simulation' | CatalogKind;
 type Amount = string | number | null | undefined;
 type Summary = {
   company_key: string; source_reference: string; first_source_call_at?: string; last_source_call_at?: string;
@@ -38,7 +40,7 @@ const money=(v:Amount) => v===null || v===undefined ? '—' : moneyFormat.format
 const percent=(v:number) => Number.isFinite(v) ? v.toFixed(1)+'%' : '—';
 const label=(s:string|null) => s ? s.replaceAll('_',' ').toLowerCase().replace(/^./,x=>x.toUpperCase()) : '—';
 const displayDate=(v?:string) => v ? new Date(v.replace(' ','T').slice(0,10)+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '—';
-const pageNames:Record<Page,string>={overview:'Overview',cdrs:'CDR Explorer',upload:'Upload CDR',customers:'Customers',numbers:'Number Inventory',vendors:'Vendors','vendor-rates':'Vendor Cost Rate Cards','selling-rates':'MiiTel Selling Rate Cards','customer-pricing':'Customer Special Pricing'};
+const pageNames:Record<Page,string>={overview:'Overview',cdrs:'CDR Explorer',upload:'Upload CDR',customers:'Customers',numbers:'Number Inventory',vendors:'Vendors','vendor-rates':'Vendor Cost Rate Cards','selling-rates':'MiiTel Selling Rate Cards','customer-pricing':'Customer Special Pricing','rating-simulation':'Rating Simulation'};
 const nav:{page:Page;label:string;icon:LucideIcon}[]=[
   {page:'overview',label:'Overview',icon:LayoutDashboard},
   {page:'cdrs',label:'CDR Explorer',icon:ClipboardList},
@@ -49,6 +51,7 @@ const nav:{page:Page;label:string;icon:LucideIcon}[]=[
   {page:'vendor-rates',label:'Vendor Cost Rates',icon:Wallet},
   {page:'selling-rates',label:'MiiTel Selling Rates',icon:BarChart3},
   {page:'customer-pricing',label:'Customer Pricing',icon:ClipboardList},
+  {page:'rating-simulation',label:'Rating Simulation',icon:Activity},
 ];
 
 type CustomerMaster={id:string;customer_code:string;customer_name:string;legal_company_name:string|null;miitel_company_code:string|null;miitel_company_id:string|null;status:string;billing_cycle:string;activation_date:string|null;currency:string;default_billing_increment_seconds:number;address:string|null;remarks:string|null};
@@ -68,7 +71,7 @@ function CustomerForm({record,canEdit,onClose,onSaved}:{record?:CustomerMaster;c
   async function submit(e:React.FormEvent){e.preventDefault();if(!canEdit||busy)return;setBusy(true);setError('');try{const row=await request<CustomerMaster>('/api/master/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...form,...(record?{id:record.id}:{})})});onSaved(row);}catch(err){setError(err instanceof Error?err.message:'Save failed')}finally{setBusy(false)}}
   const fields:[keyof typeof form,string,number,boolean][]=[['customer_code','Customer code',100,true],['customer_name','Customer name',200,true],['legal_company_name','Legal company name',200,false],['miitel_company_code','MiiTel company code',100,true],['miitel_company_id','MiiTel company ID',19,false],['address','Address',2000,false],['remarks','Remarks',2000,false]];
   return <section className="card customer-form"><div className="card-title"><div><h3>{record?'Customer details':'New Customer'}</h3><p>{record?'Identity and billing history are preserved.':'Register a customer before processing CDRs.'}</p></div><button className="icon-button" aria-label="Close customer form" onClick={onClose} disabled={busy}><X size={20}/></button></div>
-    <form onSubmit={submit}><div className="customer-form-grid">{fields.map(([k,title,max,required])=><div className={'field '+(k==='address'||k==='remarks'?'wide-field':'')} key={k}><label htmlFor={'customer-'+k}>{title}</label><input id={'customer-'+k} value={form[k]} maxLength={max} required={required} readOnly={!canEdit||Boolean(record&&['customer_code','miitel_company_code','miitel_company_id'].includes(k))} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} placeholder={k==='miitel_company_code'?'e.g. company-id':undefined}/></div>)}</div>
+    <form onSubmit={submit}><div className="customer-form-grid">{fields.map(([k,title,max,required])=><div className={'field '+(k==='address'||k==='remarks'?'wide-field':'')} key={k}><label htmlFor={'customer-'+k}>{title}</label><input id={'customer-'+k} value={form[k]} maxLength={max} required={required} readOnly={!canEdit||Boolean(record&&(['customer_code','miitel_company_code'].includes(k)||(k==='miitel_company_id'&&record.miitel_company_id!=null)))} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} placeholder={k==='miitel_company_code'?'e.g. company-id':undefined}/></div>)}</div>
     {record&&<div className="customer-meta"><span>Status: {label(record.status)}</span><span>Billing: {label(record.billing_cycle)}</span><span>Currency: {record.currency}</span><span>Default billing increment: {record.default_billing_increment_seconds}s</span></div>}
     {error&&<ErrorBox message={error}/>}
     <div className="upload-actions"><button type="button" className="outline-button" onClick={onClose} disabled={busy}>Cancel</button>{canEdit&&<button className="primary-button" type="submit" disabled={busy}>{busy?<Spinner/>:'Save Customer'}</button>}</div></form></section>;
@@ -210,17 +213,19 @@ function StatusBadge({status}:{status:string}){
   return <span className={'badge '+tone}>{label(status).replace('Simulated ','')}</span>;
 }
 function CdrExplorer({companies,company,demo}:{companies:string[];company:string;demo:boolean}){
+  const [mode,setMode]=useState<'legacy'|'active'>('legacy');
   const [selected,setSelected]=useState(company!=='all'?company:companies[0]||'');
   const [status,setStatus]=useState('SIMULATED_SPECIAL_RATE'),[offset,setOffset]=useState(0),[rows,setRows]=useState<RatedCdr[]>([]);
   const [error,setError]=useState(''),[loading,setLoading]=useState(false);
   const limit=25;
   useEffect(()=>{setSelected(company!=='all'?company:companies[0]||'');setOffset(0)},[company,companies.join('|')]);
-  useEffect(()=>{if(!selected)return;let valid=true;setLoading(true);setError('');
+  useEffect(()=>{if(!selected||mode==='active')return;let valid=true;setLoading(true);setError('');
     const params=new URLSearchParams({company:selected,status,limit:String(limit),offset:String(offset)});
     request<RatedCdr[]>('/api/cdrs?'+params).then(data=>{if(valid)setRows(data)}).catch(err=>{if(valid){setError(err.message);setRows([])}}).finally(()=>{if(valid)setLoading(false)});
     return()=>{valid=false};
-  },[selected,status,offset]);
-  return <div className="page-stack"><div className="page-intro"><div><h1>CDR Explorer</h1><p>Inspect rating results, special prices and held calls.</p></div><span className="badge blue"><ShieldCheck size={15}/> Simulation only</span></div>
+  },[selected,status,offset,mode]);
+  if(mode==='active')return <ActiveCdrPreview companies={companies} company={selected||company} onLegacy={()=>setMode('legacy')}/>;
+  return <div className="page-stack"><div className="page-intro"><div><h1>CDR Explorer</h1><p>Inspect rating results, special prices and held calls.</p></div><button className="outline-button" onClick={()=>setMode('active')}>Active Rate Preview</button></div>
     <section className="card"><div className="filters"><div className="field"><label>Customer</label><select value={selected} onChange={e=>{setSelected(e.target.value);setOffset(0)}}><option value="">Select customer</option>{companies.map(c=><option key={c}>{c}</option>)}</select></div><div className="field"><label>Selling rating status</label><select value={status} onChange={e=>{setStatus(e.target.value);setOffset(0)}}><option value="">All statuses</option><option value="SIMULATED_SPECIAL_RATE">Customer special rate</option><option value="SIMULATED_STANDARD_RATE">Standard rate</option><option value="HOLD_INBOUND_POLICY">Held inbound</option><option value="HOLD_ROUTE">Held route</option><option value="HOLD_STANDARD_PRICE">Held standard price</option><option value="SKIP_NO_BILLABLE_USAGE">No billable usage</option></select></div></div>
     {error&&<ErrorBox message={error}/>}
     {loading?<div className="loading-card"><Spinner/> Loading CDR ratings…</div>:null}
@@ -276,13 +281,14 @@ function Workspace({session,onExit}:{session:Session;onExit:()=>void}){
   async function logout(){try{await request('/api/auth/logout',{method:'POST'});}finally{onExit()}}
   return <div className="app-shell">
     {mobileOpen&&<button className="mobile-overlay" aria-label="Close menu" onClick={()=>setMobileOpen(false)}/>}
-    <aside className={'sidebar '+(mobileOpen?'sidebar-open':'')}><Brand/>{[{label:'DASHBOARD & CDR',items:nav.slice(0,3)},{label:'CUSTOMER MANAGEMENT',items:nav.slice(3,4)},{label:'NUMBER MANAGEMENT',items:nav.slice(4,5)},{label:'VENDOR MANAGEMENT',items:nav.slice(5,6)},{label:'PRICING MANAGEMENT',items:nav.slice(6)}].map(group=><div className="sidebar-group" key={group.label}><span className="sidebar-label">{group.label}</span>{group.items.map(item=><button key={item.page} className={'nav-item '+(page===item.page?'nav-active':'')} onClick={()=>go(item.page)}><item.icon size={21} strokeWidth={1.8}/><span>{item.label}</span>{page===item.page&&<span className="nav-dot"/>}</button>)}</div>)}<div className="sidebar-bottom"><div className="side-info"><div className="side-info-icon"><Headphones size={20}/></div><div><strong>Call charge</strong><span>Focused workspace</span></div></div><div className="sidebar-mode"><span className="status-dot"/>{session.demo?'Local design demo':'Simulation only'}</div>{!session.demo&&<button className="nav-item logout-link" onClick={logout}><LogOut size={20}/>Sign out</button>}</div></aside>
-    <div className="main-shell"><header className="topbar"><div className="topbar-left"><button className="icon-button mobile-menu" aria-label="Open navigation" onClick={()=>setMobileOpen(true)}><Menu size={24}/></button><span className="breadcrumbs">CallMeter <span>/</span> <strong>{pageNames[page]}</strong></span></div><div className="topbar-right"><div className="mode-pill"><ShieldCheck size={16}/><span>{session.demo?'Demo data':'Simulation'}</span></div><button className="icon-button refresh-button" title="Refresh data" aria-label="Refresh data" onClick={()=>(masterPage||catalogPage)?setMasterRevision(n=>n+1):void refresh()}><RefreshCw size={20} className={!masterPage&&!catalogPage&&loading?'spin':''}/></button><div className="profile-avatar">CM</div></div></header><main className="content"><div className="toolbar"><div><span className="eyebrow">MIITEL CALLMETER</span><h2>{pageNames[page]}</h2></div>{!masterPage&&!catalogPage&&<div className="company-control"><Building2 size={18}/><select aria-label="Filter customer" value={company} onChange={e=>setCompany(e.target.value)}><option value="all">All customers</option>{companies.map(c=><option key={c}>{c}</option>)}</select><ChevronDown size={16}/></div>}</div>
+    <aside className={'sidebar '+(mobileOpen?'sidebar-open':'')}><Brand/>{[{label:'DASHBOARD & CDR',items:nav.slice(0,3)},{label:'CUSTOMER MANAGEMENT',items:nav.slice(3,4)},{label:'NUMBER MANAGEMENT',items:nav.slice(4,5)},{label:'VENDOR MANAGEMENT',items:nav.slice(5,6)},{label:'PRICING MANAGEMENT',items:nav.slice(6,9)},{label:'RATING ENGINE',items:nav.slice(9)}].map(group=><div className="sidebar-group" key={group.label}><span className="sidebar-label">{group.label}</span>{group.items.map(item=><button key={item.page} className={'nav-item '+(page===item.page?'nav-active':'')} onClick={()=>go(item.page)}><item.icon size={21} strokeWidth={1.8}/><span>{item.label}</span>{page===item.page&&<span className="nav-dot"/>}</button>)}</div>)}<div className="sidebar-bottom"><div className="side-info"><div className="side-info-icon"><Headphones size={20}/></div><div><strong>Call charge</strong><span>Focused workspace</span></div></div><div className="sidebar-mode"><span className="status-dot"/>{session.demo?'Local design demo':'Simulation only'}</div>{!session.demo&&<button className="nav-item logout-link" onClick={logout}><LogOut size={20}/>Sign out</button>}</div></aside>
+    <div className="main-shell"><header className="topbar"><div className="topbar-left"><button className="icon-button mobile-menu" aria-label="Open navigation" onClick={()=>setMobileOpen(true)}><Menu size={24}/></button><span className="breadcrumbs">CallMeter <span>/</span> <strong>{pageNames[page]}</strong></span></div><div className="topbar-right"><div className="mode-pill"><ShieldCheck size={16}/><span>{session.demo?'Demo data':'Simulation'}</span></div><button className="icon-button refresh-button" title="Refresh data" aria-label="Refresh data" onClick={()=>(masterPage||catalogPage)?setMasterRevision(n=>n+1):void refresh()}><RefreshCw size={20} className={!masterPage&&!catalogPage&&loading?'spin':''}/></button><div className="profile-avatar">CM</div></div></header><main className="content"><div className="toolbar"><div><span className="eyebrow">MIITEL CALLMETER</span><h2>{pageNames[page]}</h2></div>{!masterPage&&!catalogPage&&page!=='rating-simulation'&&<div className="company-control"><Building2 size={18}/><select aria-label="Filter customer" value={company} onChange={e=>setCompany(e.target.value)}><option value="all">All customers</option>{companies.map(c=><option key={c}>{c}</option>)}</select><ChevronDown size={16}/></div>}</div>
       {page==='overview'&&<Overview rows={filtered} loading={loading} error={error} company={company} demo={session.demo} onRetry={refresh} onExplore={c=>{setCompany(c);go('cdrs')}}/>}
       {page==='cdrs'&&<CdrExplorer companies={companies} company={company} demo={session.demo}/>}
       {page==='upload'&&<Upload company={company} importEnabled={session.importEnabled} demo={session.demo} maxUploadBytes={session.maxUploadBytes??32*1024*1024} onComplete={refresh} canEdit={Boolean(session.masterWriteEnabled)}/>}
       {masterPage&&<MasterList key={page} kind={page} demo={session.demo} revision={masterRevision} canEdit={Boolean(session.masterWriteEnabled)}/>}
       {catalogPage&&<CatalogWorkspace key={page} kind={page} revision={masterRevision} canEdit={Boolean(session.masterWriteEnabled)}/>}
+      {page==='rating-simulation'&&<RatingSimulation demo={session.demo}/>}
       <footer className="app-footer"><span>MiiTel CallMeter · Call charge management</span><span>Preview only · No invoice posting</span></footer>
     </main></div>
   </div>;
