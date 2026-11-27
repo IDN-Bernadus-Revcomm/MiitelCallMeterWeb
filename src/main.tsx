@@ -7,9 +7,11 @@ import {
   Search, ShieldCheck, Users, Wallet, X
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { NumberCreate,NumberAdminActions,NumberFilters } from './number-workspace';
+import { CatalogWorkspace,type CatalogKind } from './catalog-workspace';
 import './styles.css';
 
-type Page = 'overview' | 'cdrs' | 'upload' | 'customers' | 'numbers';
+type Page = 'overview' | 'cdrs' | 'upload' | 'customers' | 'numbers' | CatalogKind;
 type Amount = string | number | null | undefined;
 type Summary = {
   company_key: string; source_reference: string; first_source_call_at?: string; last_source_call_at?: string;
@@ -36,13 +38,17 @@ const money=(v:Amount) => v===null || v===undefined ? '—' : moneyFormat.format
 const percent=(v:number) => Number.isFinite(v) ? v.toFixed(1)+'%' : '—';
 const label=(s:string|null) => s ? s.replaceAll('_',' ').toLowerCase().replace(/^./,x=>x.toUpperCase()) : '—';
 const displayDate=(v?:string) => v ? new Date(v.replace(' ','T').slice(0,10)+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '—';
-const pageNames:Record<Page,string>={overview:'Overview',cdrs:'CDR Explorer',upload:'Upload CDR',customers:'Customers',numbers:'Number Inventory'};
+const pageNames:Record<Page,string>={overview:'Overview',cdrs:'CDR Explorer',upload:'Upload CDR',customers:'Customers',numbers:'Number Inventory',vendors:'Vendors','vendor-rates':'Vendor Cost Rate Cards','selling-rates':'MiiTel Selling Rate Cards','customer-pricing':'Customer Special Pricing'};
 const nav:{page:Page;label:string;icon:LucideIcon}[]=[
   {page:'overview',label:'Overview',icon:LayoutDashboard},
   {page:'cdrs',label:'CDR Explorer',icon:ClipboardList},
   {page:'upload',label:'Upload CDR',icon:CloudUpload},
   {page:'customers',label:'Customers',icon:Users},
   {page:'numbers',label:'Number Inventory',icon:PhoneCall},
+  {page:'vendors',label:'Vendors',icon:Building2},
+  {page:'vendor-rates',label:'Vendor Cost Rates',icon:Wallet},
+  {page:'selling-rates',label:'MiiTel Selling Rates',icon:BarChart3},
+  {page:'customer-pricing',label:'Customer Pricing',icon:ClipboardList},
 ];
 
 type CustomerMaster={id:string;customer_code:string;customer_name:string;legal_company_name:string|null;miitel_company_code:string|null;miitel_company_id:string|null;status:string;billing_cycle:string;activation_date:string|null;currency:string;default_billing_increment_seconds:number;address:string|null;remarks:string|null};
@@ -70,9 +76,9 @@ function CustomerForm({record,canEdit,onClose,onSaved}:{record?:CustomerMaster;c
 
 type DetailRow=Record<string,string|number|boolean|null>;
 type NumberDetail={number:DetailRow;translations:DetailRow[];assignments:DetailRow[];vendorHistory:DetailRow[];migrations:DetailRow[];statusHistory:DetailRow[]};
-function NumberDetails({id,onClose}:{id:string;onClose:()=>void}){
-  const [details,setDetails]=useState<NumberDetail|null>(null),[error,setError]=useState('');
-  useEffect(()=>{let current=true;request<NumberDetail>('/api/master/number-details?'+new URLSearchParams({id})).then(v=>{if(current)setDetails(v)}).catch(e=>{if(current)setError(e.message)});return()=>{current=false}},[id]);
+function NumberDetails({id,onClose,canEdit,onChanged}:{id:string;onClose:()=>void;canEdit:boolean;onChanged:()=>void}){
+  const [details,setDetails]=useState<NumberDetail|null>(null),[error,setError]=useState(''),[revision,setRevision]=useState(0);
+  useEffect(()=>{let current=true;setError('');setDetails(null);request<NumberDetail>('/api/master/number-details?'+new URLSearchParams({id})).then(v=>{if(current)setDetails(v)}).catch(e=>{if(current)setError(e.message)});return()=>{current=false}},[id,revision]);
   const value=(v:DetailRow[string])=>v===null||v===undefined?'—':typeof v==='boolean'?(v?'Yes':'No'):String(v);
   const sets:{key:Exclude<keyof NumberDetail,'number'>;title:string;fields:[string,string][]}[]=[
     {key:'translations',title:'Number Translation',fields:[['translation_number','Translation'],['vendor_name','Vendor'],['call_direction','Direction'],['is_primary','Primary'],['status','Status'],['effective_from','From'],['effective_to','To']]},
@@ -82,7 +88,7 @@ function NumberDetails({id,onClose}:{id:string;onClose:()=>void}){
     {key:'statusHistory',title:'Number History',fields:[['field_name','Field'],['old_value','Previous'],['new_value','New'],['changed_at','Changed']]}
   ];
   const general:[string,string][]=[['number_type','Number type'],['vendor_name','Vendor'],['country_name','Country'],['area_code','Area code'],['ownership','Ownership'],['status','Status'],['number_condition','Condition'],['availability_status','Availability'],['usage_type','Usage'],['customer_name','Customer'],['internal_team','Internal team'],['migration_eligibility','Migration eligibility'],['sli_enabled','SLI enabled'],['billing_increment_seconds','Billing increment (s)']];
-  return <section className="card number-detail"><div className="card-title"><div><h3>{details?value(details.number.phone_number):'Number details'}</h3><p>Inventory profile and latest 100 events per history type.</p></div><button className="icon-button" aria-label="Close number details" onClick={onClose}><X size={20}/></button></div>{error&&<ErrorBox message={error}/>} {!error&&!details&&<div className="loading-card"><Spinner/> Loading number details…</div>}{details&&<><div className="number-detail-grid">{general.map(([k,title])=><div key={k}><span>{title}</span><strong>{value(details.number[k])}</strong></div>)}</div>{sets.map(s=><details className="number-history" key={s.key} open={s.key==='translations'}><summary>{s.title} <span className="badge gray">{details[s.key].length}</span></summary>{details[s.key].length===0?<p>No records.</p>:<div className="table-scroll"><table><thead><tr>{s.fields.map(([k,title])=><th key={k}>{title}</th>)}</tr></thead><tbody>{details[s.key].map((r,i)=><tr key={i}>{s.fields.map(([k])=><td key={k}>{value(r[k])}</td>)}</tr>)}</tbody></table></div>}</details>)}</>}</section>;
+  return <section className="card number-detail"><div className="card-title"><div><h3>{details?value(details.number.phone_number):'Number details'}</h3><p>Inventory profile and latest 100 events per history type.</p></div><button className="icon-button" aria-label="Close number details" onClick={onClose}><X size={20}/></button></div>{error&&<ErrorBox message={error}/>} {!error&&!details&&<div className="loading-card"><Spinner/> Loading number details…</div>}{details&&<><div className="number-detail-grid">{general.map(([k,title])=><div key={k}><span>{title}</span><strong>{value(details.number[k])}</strong></div>)}</div>{canEdit&&<NumberAdminActions id={id} number={details.number} assignments={details.assignments} translations={details.translations} onChanged={()=>{setRevision(n=>n+1);onChanged()}}/>}{sets.map(s=><details className="number-history" key={s.key} open={s.key==='translations'}><summary>{s.title} <span className="badge gray">{details[s.key].length}</span></summary>{details[s.key].length===0?<p>No records.</p>:<div className="table-scroll"><table><thead><tr>{s.fields.map(([k,title])=><th key={k}>{title}</th>)}</tr></thead><tbody>{details[s.key].map((r,i)=><tr key={i}>{s.fields.map(([k])=><td key={k}>{value(r[k])}</td>)}</tr>)}</tbody></table></div>}</details>)}</>}</section>;
 }
 
 function MasterList({kind,demo,revision,canEdit}:{kind:'customers'|'numbers';demo:boolean;revision:number;canEdit:boolean}){
@@ -93,20 +99,25 @@ function MasterList({kind,demo,revision,canEdit}:{kind:'customers'|'numbers';dem
   const [loading,setLoading]=useState(true),[error,setError]=useState(''),[retry,setRetry]=useState(0);
   const [editor,setEditor]=useState<CustomerMaster|'new'|null>(null),[notice,setNotice]=useState('');
   const [numberDetail,setNumberDetail]=useState<string|null>(null);
+  const [newNumber,setNewNumber]=useState(false);
+  const [inventoryFilters,setInventoryFilters]=useState<Record<string,string>>({});
   useEffect(()=>{let current=true;setLoading(true);setError('');setRows([]);setHasMore(false);
     const params=new URLSearchParams({q:search,limit:String(limit),offset:String(offset)});
     if(isCustomers&&status)params.set('status',status);
+    if(!isCustomers)for(const [key,value] of Object.entries(inventoryFilters))params.set(key,value);
     request<{rows:(CustomerMaster|NumberMaster)[];hasMore:boolean}>('/api/master/'+kind+'?'+params).then(result=>{if(current){setRows(result.rows);setHasMore(result.hasMore)}}).catch(err=>{if(current)setError(err instanceof Error?err.message:'Unable to load master data')}).finally(()=>{if(current)setLoading(false)});
     return()=>{current=false};
-  },[kind,search,offset,retry,revision,status]);
+  },[kind,search,offset,retry,revision,status,inventoryFilters]);
   function submit(e:React.FormEvent){e.preventDefault();setOffset(0);setSearch(query.trim());setRetry(n=>n+1)}
   const columns=isCustomers?['Customer','MiiTel company','Billing cycle','Activation','Status','Details']:['Number','Type / vendor','Customer / assignment','Translation number','Billing unit','Status','Details'];
   return <div className="page-stack"><div className="page-intro"><div><h1>{pageNames[kind]}</h1><p>{isCustomers?'Registered customer accounts and MiiTel company mapping.':'Registered numbers, vendor ownership, and translation mappings.'}</p></div><span className="badge blue"><Database size={15}/> Master data</span></div>
     {editor&&<CustomerForm key={editor==='new'?'new':editor.id} record={editor==='new'?undefined:editor} canEdit={canEdit} onClose={()=>setEditor(null)} onSaved={()=>{setEditor(null);setNotice('Customer saved.');setRetry(n=>n+1)}}/>}
-    {numberDetail&&<NumberDetails key={numberDetail} id={numberDetail} onClose={()=>setNumberDetail(null)}/>}
+    {newNumber&&<NumberCreate onClose={()=>setNewNumber(false)} onSaved={id=>{setNewNumber(false);setNumberDetail(id);setRetry(n=>n+1);setNotice('Number registered. Ready status requires verification.')}}/>}
+    {numberDetail&&<NumberDetails key={numberDetail} id={numberDetail} onClose={()=>setNumberDetail(null)} canEdit={canEdit} onChanged={()=>setRetry(n=>n+1)}/>}
     {notice&&<div className="success-box">{notice}</div>}
-    <section className="card table-card master-card"><div className="card-title"><div><h3>{isCustomers?'Customer directory':'Registered numbers'}</h3><p>Live records from the existing inventory.</p></div>{isCustomers&&canEdit?<button className="primary-button" onClick={()=>{setEditor('new');setNotice('')}}>+ New Customer</button>:<span className="badge gray">Read only</span>}</div>
+    <section className="card table-card master-card"><div className="card-title"><div><h3>{isCustomers?'Customer directory':'Registered numbers'}</h3><p>Live records from the existing inventory.</p></div>{canEdit?<button className="primary-button" onClick={()=>{if(isCustomers)setEditor('new');else{setNewNumber(true);setNumberDetail(null)}setNotice('')}}>{isCustomers?'+ New Customer':'+ New Number'}</button>:<span className="badge gray">Read only</span>}</div>
       <form className="master-search" onSubmit={submit}><div className="master-search-input"><Search size={18}/><input aria-label="Search master data" maxLength={100} value={query} onChange={e=>setQuery(e.target.value)} placeholder={isCustomers?'Search name, code or MiiTel company':'Search number, vendor or customer'}/></div>{isCustomers&&<div className="field"><select aria-label="Customer status" value={status} onChange={e=>{setStatus(e.target.value);setOffset(0)}}><option value="">All statuses</option><option value="active">Active</option><option value="inactive">Inactive</option></select></div>}<button className="primary-button" type="submit">Search</button>{search&&<button type="button" className="outline-button" onClick={()=>{setQuery('');setSearch('');setOffset(0)}}>Clear</button>}</form>
+      {!isCustomers&&<NumberFilters onChange={v=>{setInventoryFilters(v);setOffset(0)}}/>}
       {error&&<div className="master-state"><ErrorBox message={error} onRetry={()=>setRetry(n=>n+1)}/></div>}
       {loading&&<div className="master-state loading-card"><Spinner/> Loading master data…</div>}
       {!loading&&!error&&!rows.length&&<div className="master-state empty-card"><Search/><h3>No {isCustomers?'customers':'numbers'} found</h3><p>{demo?'Connect the live API to view registered master data.':'Try a different search or check your existing master records.'}</p></div>}
@@ -256,6 +267,7 @@ function Workspace({session,onExit}:{session:Session;onExit:()=>void}){
   const [mobileOpen,setMobileOpen]=useState(false);
   const [masterRevision,setMasterRevision]=useState(0);
   const masterPage=page==='customers'||page==='numbers';
+  const catalogPage=page==='vendors'||page==='vendor-rates'||page==='selling-rates'||page==='customer-pricing';
   const refresh=useCallback(async()=>{setLoading(true);setError('');try{setSummary(await request<Summary[]>('/api/summary'));}catch(err){setError(err instanceof Error?err.message:'Unable to load summary')}finally{setLoading(false)}},[]);
   useEffect(()=>{void refresh()},[refresh]);
   const companies=useMemo(()=>[...new Set(summary.map(r=>r.company_key))],[summary]);
@@ -264,12 +276,13 @@ function Workspace({session,onExit}:{session:Session;onExit:()=>void}){
   async function logout(){try{await request('/api/auth/logout',{method:'POST'});}finally{onExit()}}
   return <div className="app-shell">
     {mobileOpen&&<button className="mobile-overlay" aria-label="Close menu" onClick={()=>setMobileOpen(false)}/>}
-    <aside className={'sidebar '+(mobileOpen?'sidebar-open':'')}><Brand/>{[{label:'DASHBOARD & CDR',items:nav.slice(0,3)},{label:'CUSTOMER MANAGEMENT',items:nav.slice(3,4)},{label:'NUMBER MANAGEMENT',items:nav.slice(4)}].map(group=><div className="sidebar-group" key={group.label}><span className="sidebar-label">{group.label}</span>{group.items.map(item=><button key={item.page} className={'nav-item '+(page===item.page?'nav-active':'')} onClick={()=>go(item.page)}><item.icon size={21} strokeWidth={1.8}/><span>{item.label}</span>{page===item.page&&<span className="nav-dot"/>}</button>)}</div>)}<div className="sidebar-bottom"><div className="side-info"><div className="side-info-icon"><Headphones size={20}/></div><div><strong>Call charge</strong><span>Focused workspace</span></div></div><div className="sidebar-mode"><span className="status-dot"/>{session.demo?'Local design demo':'Simulation only'}</div>{!session.demo&&<button className="nav-item logout-link" onClick={logout}><LogOut size={20}/>Sign out</button>}</div></aside>
-    <div className="main-shell"><header className="topbar"><div className="topbar-left"><button className="icon-button mobile-menu" aria-label="Open navigation" onClick={()=>setMobileOpen(true)}><Menu size={24}/></button><span className="breadcrumbs">CallMeter <span>/</span> <strong>{pageNames[page]}</strong></span></div><div className="topbar-right"><div className="mode-pill"><ShieldCheck size={16}/><span>{session.demo?'Demo data':'Simulation'}</span></div><button className="icon-button refresh-button" title="Refresh data" aria-label="Refresh data" onClick={()=>masterPage?setMasterRevision(n=>n+1):void refresh()}><RefreshCw size={20} className={!masterPage&&loading?'spin':''}/></button><div className="profile-avatar">CM</div></div></header><main className="content"><div className="toolbar"><div><span className="eyebrow">MIITEL CALLMETER</span><h2>{pageNames[page]}</h2></div>{!masterPage&&<div className="company-control"><Building2 size={18}/><select aria-label="Filter customer" value={company} onChange={e=>setCompany(e.target.value)}><option value="all">All customers</option>{companies.map(c=><option key={c}>{c}</option>)}</select><ChevronDown size={16}/></div>}</div>
+    <aside className={'sidebar '+(mobileOpen?'sidebar-open':'')}><Brand/>{[{label:'DASHBOARD & CDR',items:nav.slice(0,3)},{label:'CUSTOMER MANAGEMENT',items:nav.slice(3,4)},{label:'NUMBER MANAGEMENT',items:nav.slice(4,5)},{label:'VENDOR MANAGEMENT',items:nav.slice(5,6)},{label:'PRICING MANAGEMENT',items:nav.slice(6)}].map(group=><div className="sidebar-group" key={group.label}><span className="sidebar-label">{group.label}</span>{group.items.map(item=><button key={item.page} className={'nav-item '+(page===item.page?'nav-active':'')} onClick={()=>go(item.page)}><item.icon size={21} strokeWidth={1.8}/><span>{item.label}</span>{page===item.page&&<span className="nav-dot"/>}</button>)}</div>)}<div className="sidebar-bottom"><div className="side-info"><div className="side-info-icon"><Headphones size={20}/></div><div><strong>Call charge</strong><span>Focused workspace</span></div></div><div className="sidebar-mode"><span className="status-dot"/>{session.demo?'Local design demo':'Simulation only'}</div>{!session.demo&&<button className="nav-item logout-link" onClick={logout}><LogOut size={20}/>Sign out</button>}</div></aside>
+    <div className="main-shell"><header className="topbar"><div className="topbar-left"><button className="icon-button mobile-menu" aria-label="Open navigation" onClick={()=>setMobileOpen(true)}><Menu size={24}/></button><span className="breadcrumbs">CallMeter <span>/</span> <strong>{pageNames[page]}</strong></span></div><div className="topbar-right"><div className="mode-pill"><ShieldCheck size={16}/><span>{session.demo?'Demo data':'Simulation'}</span></div><button className="icon-button refresh-button" title="Refresh data" aria-label="Refresh data" onClick={()=>(masterPage||catalogPage)?setMasterRevision(n=>n+1):void refresh()}><RefreshCw size={20} className={!masterPage&&!catalogPage&&loading?'spin':''}/></button><div className="profile-avatar">CM</div></div></header><main className="content"><div className="toolbar"><div><span className="eyebrow">MIITEL CALLMETER</span><h2>{pageNames[page]}</h2></div>{!masterPage&&!catalogPage&&<div className="company-control"><Building2 size={18}/><select aria-label="Filter customer" value={company} onChange={e=>setCompany(e.target.value)}><option value="all">All customers</option>{companies.map(c=><option key={c}>{c}</option>)}</select><ChevronDown size={16}/></div>}</div>
       {page==='overview'&&<Overview rows={filtered} loading={loading} error={error} company={company} demo={session.demo} onRetry={refresh} onExplore={c=>{setCompany(c);go('cdrs')}}/>}
       {page==='cdrs'&&<CdrExplorer companies={companies} company={company} demo={session.demo}/>}
       {page==='upload'&&<Upload company={company} importEnabled={session.importEnabled} demo={session.demo} maxUploadBytes={session.maxUploadBytes??32*1024*1024} onComplete={refresh} canEdit={Boolean(session.masterWriteEnabled)}/>}
       {masterPage&&<MasterList key={page} kind={page} demo={session.demo} revision={masterRevision} canEdit={Boolean(session.masterWriteEnabled)}/>}
+      {catalogPage&&<CatalogWorkspace key={page} kind={page} revision={masterRevision} canEdit={Boolean(session.masterWriteEnabled)}/>}
       <footer className="app-footer"><span>MiiTel CallMeter · Call charge management</span><span>Preview only · No invoice posting</span></footer>
     </main></div>
   </div>;

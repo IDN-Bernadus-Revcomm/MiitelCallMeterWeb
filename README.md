@@ -37,7 +37,11 @@ a customer directly from Upload CDR. Set a distinct `ADMIN_ACCESS_TOKEN`
 on the backend only when enabling writes. Sign in using the admin key to
 edit; the existing workspace key can view only. This is a temporary shared
 admin credential, not individual-user RBAC. No lifecycle status changes,
-number assignments, or identity changes are exposed by these forms.
+number identity changes are exposed by the customer forms. Number Inventory
+supports registration, lifecycle updates, assign/release, and translation
+creation/closure using the existing database triggers. Vendor profiles are
+editable; call rate cards and discount catalogs are read-only pending rate
+validation review.
 
 ## Deploy to Vercel
 

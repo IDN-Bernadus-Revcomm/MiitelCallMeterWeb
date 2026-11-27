@@ -130,6 +130,16 @@ svg { flex-shrink: 0; }
 .number-history summary { padding:12px 15px; font-weight:700; color:#29445a; cursor:pointer; }
 .number-history summary .badge { margin-left:8px; }
 .number-history p { padding:0 15px; color:var(--muted); }
+.number-admin { margin:18px 0; padding:14px; border:1px solid var(--border); border-radius:10px; background:#f8fbfd; }
+.number-admin .upload-actions { margin:0 0 12px; }
+.action-buttons { display:flex; flex-wrap:wrap; gap:8px; }
+.number-inline-action { display:flex; align-items:flex-end; flex-wrap:wrap; gap:10px; margin-top:10px; }
+.number-inline-action .field { flex:1; min-width:180px; }
+.number-action-form { border-top:1px solid var(--border); margin-top:15px; padding-top:15px; }
+.checkbox-row { display:flex; align-items:center; gap:8px; min-height:42px; font-size:14px; color:#526b7b; }
+.field>span { font-size:13px; font-weight:700; color:#526b7b; }
+.inventory-filters { margin:0 22px 18px; padding:13px 15px; background:#f8fbfd; border:1px solid var(--border); border-radius:10px; }
+.inventory-filters summary { cursor:pointer; font-weight:700; color:#29445a; margin-bottom:10px; }
 .table-scroll { overflow:auto; width:100%; }
 table { border-collapse:collapse; min-width:710px; width:100%; font-size:13px; color:#516a7a; white-space:nowrap; }
 thead { background:#f5f9fc; color:#6e8190; }

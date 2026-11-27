@@ -75,6 +75,17 @@ export async function handleVercelRequest(request,route){
   }
   if(route==='logout'&&isPost)return reply({authenticated:false},200,{'Set-Cookie':sessionHeader('',0)});
   if(!authed)return reply({message:'Please sign in'},401);
+  if(route==='master-workspace'){
+    const resource=url.searchParams.get('resource');
+    if(['number-actions','vendor-save'].includes(resource)&&isPost){
+      if(!isAdmin)return reply({message:'Admin access required'},403);
+      const body=await request.json().catch(()=>null);if(!body||typeof body!=='object'||Array.isArray(body))return reply({message:'Invalid number data'},400);
+      return proxy(cfg,'master/'+resource,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    }
+    if(request.method!=='GET'||!['number-options','area-options','catalog'].includes(resource))return reply({message:'Method not allowed'},405);
+    const query=new URLSearchParams();for(const key of ['q','country','kind','status','limit','offset']){const value=url.searchParams.get(key);if(value!==null)query.set(key,value);}
+    return proxy(cfg,'master/'+resource+'?'+query);
+  }
   if(route==='number-details'&&request.method==='GET'){
     const query=new URLSearchParams();const id=url.searchParams.get('id');if(id!==null)query.set('id',id);
     return proxy(cfg,'master/number-details?'+query);
@@ -87,7 +98,7 @@ export async function handleVercelRequest(request,route){
   }
   if((route==='customers'||route==='numbers')&&request.method==='GET'){
     const query=new URLSearchParams();
-    for(const key of ['q','limit','offset',...(route==='customers'?['status']:[])]){const value=url.searchParams.get(key);if(value!==null)query.set(key,value);}
+    for(const key of ['q','limit','offset','status',...(route==='numbers'?['vendor','type','country','area','ownership','condition','availability','usage','migration','sli','variant','grade']:[])]){const value=url.searchParams.get(key);if(value!==null)query.set(key,value);}
     return proxy(cfg,'master/'+route+'?'+query);
   }
   if(route==='summary'&&request.method==='GET'){

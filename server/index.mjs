@@ -113,7 +113,7 @@ for(const resource of ['customers','numbers']){
   app.get('/api/master/'+resource,requireAuth,(req,res)=>{
     if(demo)return res.json({rows:[],hasMore:false});
     const qs=new URLSearchParams();
-    for(const key of ['q','limit','offset',...(resource==='customers'?['status']:[])])if(typeof req.query[key]==='string')qs.set(key,req.query[key]);
+    for(const key of ['q','limit','offset','status',...(resource==='numbers'?['vendor','type','country','area','ownership','condition','availability','usage','migration','sli','variant','grade']:[])])if(typeof req.query[key]==='string')qs.set(key,req.query[key]);
     return proxy(res,'master/'+resource+'?'+qs);
   });
 }
@@ -125,6 +125,18 @@ app.get('/api/master/number-details',requireAuth,(req,res)=>{
   if(demo)return res.status(404).json({message:'Number not found'});
   const qs=new URLSearchParams();if(typeof req.query.id==='string')qs.set('id',req.query.id);
   return proxy(res,'master/number-details?'+qs);
+});
+app.get('/api/master/workspace',requireAuth,(req,res)=>{
+  const resource=req.query.resource;
+  if(!['number-options','area-options','catalog'].includes(resource))return res.status(405).json({message:'Method not allowed'});
+  if(demo)return res.json(resource==='catalog'?{rows:[],hasMore:false}:resource==='area-options'?[]:{vendors:[],types:[],countries:[],variants:[],grades:[],customers:[],teams:[],migrationOptions:[]});
+  const qs=new URLSearchParams();for(const key of ['q','country','kind','status','limit','offset'])if(typeof req.query[key]==='string')qs.set(key,req.query[key]);
+  return proxy(res,'master/'+resource+'?'+qs);
+});
+app.post('/api/master/workspace',sameOrigin,requireAuth,(req,res)=>{
+  if(!adminIn(req)||demo)return res.status(403).json({message:'Admin access required'});
+  if(!['number-actions','vendor-save'].includes(req.query.resource))return res.status(405).json({message:'Method not allowed'});
+  return proxy(res,'master/'+req.query.resource,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(req.body)});
 });
 const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:32*1024*1024,files:1,fields:2}});
 function uploadProxy(mode){
