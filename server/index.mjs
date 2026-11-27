@@ -73,6 +73,7 @@ const snapshot=[{
   source_call_charge:'12600000.00000000',simulated_call_charge:'11900000.00000000',
   held_source_call_charge:'700000.00000000',covered_vendor_cost:'3900000.00000000',
   covered_selling:'11900000.00000000',covered_simulated_gross_profit:'8000000.00000000',
+  registered_vendor_cost:'3900000.00000000',missing_vendor_cost_cdrs:300,vendor_cost_priced_cdrs:5100,
   covered_simulated_gross_margin_pct:'67.23',billing_status:'SIMULATION_ONLY'
 }];
 

@@ -18,6 +18,7 @@ type Summary = {
   source_call_charge: Amount; simulated_call_charge: Amount; held_source_call_charge: Amount;
   covered_vendor_cost: Amount; covered_selling: Amount; covered_simulated_gross_profit: Amount;
   covered_simulated_gross_margin_pct: Amount; billing_status: string;
+  registered_vendor_cost?:Amount; missing_vendor_cost_cdrs?:Amount; vendor_cost_priced_cdrs?:Amount;
 };
 type Session = { authenticated:boolean; configured:boolean; demo:boolean; importEnabled:boolean; masterWriteEnabled?:boolean; maxUploadBytes?:number; deployment?:string };
 type RatedCdr = {
@@ -161,13 +162,17 @@ function Hero({company,demo}:{company:string;demo:boolean}){
 function Overview({rows,loading,error,company,demo,onRetry,onExplore}:{rows:Summary[];loading:boolean;error:string;company:string;demo:boolean;onRetry:()=>void;onExplore:(company:string)=>void}){
   const sum=(key:keyof Summary)=>rows.reduce((a,r)=>a+num(r[key] as Amount),0);
   const total= sum('total_cdr'), simulated=sum('simulated_cdrs'), held=sum('held_selling_cdrs'), skipped=sum('skipped_no_usage');
-  const source=sum('source_call_charge'), selling=sum('simulated_call_charge'), cost=sum('covered_vendor_cost'), profit=sum('covered_simulated_gross_profit');
-  const eligible=simulated+held, coverage=eligible?simulated/eligible*100:0, margin= sum('covered_selling')?profit/sum('covered_selling')*100:0;
+  const source=sum('source_call_charge'), selling=sum('simulated_call_charge');
+  const costReady=rows.every(r=>r.missing_vendor_cost_cdrs!=null&&r.vendor_cost_priced_cdrs!=null);
+  const missingCost=sum('missing_vendor_cost_cdrs'),pricedCost=sum('vendor_cost_priced_cdrs');
+  const cost=costReady&&(pricedCost>0||missingCost===0)?sum('registered_vendor_cost'):null;
+  const profit=cost===null?null:source-cost;
+  const eligible=simulated+held, coverage=eligible?simulated/eligible*100:0, margin=profit!==null&&source>0?profit/source*100:NaN;
   const bars=[{label:'Reported source charge',value:source,color:'#0ea5e9'},
     {label:'Simulated call charge',value:selling,color:'#54b7ed'},
-    {label:'Covered vendor cost',value:cost,color:'#f2ae58'},
-    {label:'Simulated gross profit',value:profit,color:'#15b8a1'}];
-  const max=Math.max(1,...bars.map(b=>b.value));
+    {label:'Vendor cost',value:cost,color:'#f2ae58'},
+    {label:'Estimated gross profit',value:profit,color:profit!==null&&profit<0?'#d86b60':'#15b8a1'}];
+  const max=Math.max(1,...bars.map(b=>Math.abs(b.value??0)));
   return <div className="page-stack"><Hero company={company} demo={demo}/>
     {error&&<ErrorBox message={error} onRetry={onRetry}/>}
     {loading?<div className="loading-card"><Spinner/> Loading call charge summary…</div>:null}
@@ -177,11 +182,11 @@ function Overview({rows,loading,error,company,demo,onRetry,onExplore}:{rows:Summ
       <div className="metrics-grid">
         <MetricCard title="Source call charge" value={money(source)} detail="Reported by MiiTel" icon={Wallet} tone="blue"/>
         <MetricCard title="Simulated selling" value={money(selling)} detail={count(simulated)+' rated CDRs'} icon={PhoneCall} tone="sky"/>
-        <MetricCard title="Covered vendor cost" value={money(cost)} detail="Simulated matched calls only" icon={ArrowDownRight} tone="amber"/>
-        <MetricCard title="Simulated gross profit" value={money(profit)} detail={percent(margin)+' covered margin'} icon={ArrowUpRight} tone="teal"/>
+        <MetricCard title="Vendor Cost" value={money(cost)} detail="Based on registered vendor rates" icon={ArrowDownRight} tone="amber"/>
+        <MetricCard title="Estimated Gross Profit" value={money(profit)} detail={profit===null?'Vendor cost not available':`${percent(margin)} margin${missingCost?' · provisional':''}`} icon={ArrowUpRight} tone="teal"/>
       </div>
       <div className="chart-grid">
-        <section className="card"><div className="card-title"><div><h3>Call charge breakdown</h3><p>Amounts in Indonesian rupiah</p></div><div className="small-icon"><BarChart3 size={20}/></div></div><div className="bar-chart">{bars.map(b=><div key={b.label} className="bar-row"><div className="bar-meta"><span>{b.label}</span><strong>{money(b.value)}</strong></div><div className="bar-track"><div className="bar-fill" style={{width:`${b.value/max*100}%`,background:b.color}}/></div></div>)}</div><div className="chart-note"><CircleAlert size={16}/> Costs and gross profit cover matched calls only.</div></section>
+        <section className="card"><div className="card-title"><div><h3>Call charge breakdown</h3><p>Amounts in Indonesian rupiah</p></div><div className="small-icon"><BarChart3 size={20}/></div></div><div className="bar-chart">{bars.map(b=><div key={b.label} className="bar-row"><div className="bar-meta"><span>{b.label}</span><strong>{money(b.value)}</strong></div><div className="bar-track"><div className="bar-fill" style={{width:`${Math.abs(b.value??0)/max*100}%`,background:b.color}}/></div></div>)}</div><div className="chart-note"><CircleAlert size={16}/> {!costReady?'Vendor cost summary requires the latest API deployment.':missingCost?`GP = reported call charge − available rate-card costs. ${count(missingCost)} calls still need a cost rate, so profit is provisional.`:'GP = reported call charge − registered vendor costs. No vendor CDR reconciliation required.'}</div></section>
         <section className="card coverage-card"><div className="card-title"><div><h3>Rating coverage</h3><p>CDRs eligible for rating</p></div><div className="small-icon"><Activity size={20}/></div></div><div className="donut" style={{background:`conic-gradient(#0ea5e9 0 ${coverage}%, #f8bb72 ${coverage}% 100%)`}}><div className="donut-center"><strong>{percent(coverage)}</strong><span>Rated</span></div></div><div className="coverage-legend"><div><span><i style={{background:'#0ea5e9'}}/>Simulated</span><strong>{count(simulated)}</strong></div><div><span><i style={{background:'#f8bb72'}}/>Held for review</span><strong>{count(held)}</strong></div><div><span><i style={{background:'#d7e4eb'}}/>No billable usage</span><strong>{count(skipped)}</strong></div></div></section>
       </div>
       <section className="card table-card"><div className="card-title"><div><h3>Customer billing preview</h3><p>Source files and call charge totals</p></div><span className="badge blue">Simulation</span></div><div className="table-scroll"><table><thead><tr><th>Customer / source file</th><th>CDRs</th><th>Source charge</th><th>Simulated charge</th><th>Held charge</th><th></th></tr></thead><tbody>{rows.map((r,i)=><tr key={r.company_key+r.source_reference+i}><td><div className="customer-cell"><div className="customer-avatar">{r.company_key.slice(0,2).toUpperCase()}</div><div><strong>{r.company_key}</strong><span>{r.source_reference}</span></div></div></td><td>{count(r.total_cdr)}</td><td>{money(r.source_call_charge)}</td><td><strong>{money(r.simulated_call_charge)}</strong></td><td className="held-amount">{money(r.held_source_call_charge)}</td><td><button className="outline-button small" onClick={()=>onExplore(r.company_key)}>Inspect</button></td></tr>)}</tbody></table></div><div className="table-footer"><span>{rows.length} source file{rows.length!==1?'s':''}</span><span>Not an invoice or posted charge</span></div></section>
