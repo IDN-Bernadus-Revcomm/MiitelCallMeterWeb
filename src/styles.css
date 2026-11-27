@@ -27,6 +27,8 @@ svg { flex-shrink: 0; }
 .brand-name span { color:#0aa2e4; }
 .brand-subtitle { font-size:10px; font-weight:760; color:#8a9dab; letter-spacing:1.3px; margin-top:6px; }
 .sidebar-group { margin-top:47px; display:flex; flex-direction:column; gap:5px; }
+.sidebar-group + .sidebar-group { margin-top:28px; }
+.sidebar { overflow-y:auto; }
 .sidebar-label { font-size:11px; letter-spacing:1.3px; font-weight:750; color:#8b9ca9; margin:0 12px 11px; }
 .nav-item { border:0; background:transparent; text-align:left; border-radius:11px; display:flex; align-items:center; gap:12px; min-height:47px; padding:12px 13px; color:#536b7b; font-size:14px; font-weight:600; width:100%; }
 .nav-item:hover { background:#f3f8fb; color:#087cae; }
@@ -108,6 +110,11 @@ svg { flex-shrink: 0; }
 .coverage-legend strong { font-weight:730; color:#2c4354; }
 .table-card { padding:22px 0 0; }
 .table-card .card-title { padding:0 22px; }
+.master-search { display:flex; align-items:center; flex-wrap:wrap; gap:10px; padding:0 22px 19px; }
+.master-search-input { display:flex; align-items:center; gap:9px; color:#718998; border:1px solid #d9e5ed; border-radius:9px; padding:0 12px; max-width:420px; flex:1 1 220px; min-height:42px; }
+.master-search-input input { border:0; outline:none; color:#273f50; width:100%; min-width:0; padding:9px 0; font-size:14px; }
+.master-state { margin:0 22px 14px; }
+.master-translation { max-width:215px; white-space:normal; overflow-wrap:anywhere; }
 .table-scroll { overflow:auto; width:100%; }
 table { border-collapse:collapse; min-width:710px; width:100%; font-size:13px; color:#516a7a; white-space:nowrap; }
 thead { background:#f5f9fc; color:#6e8190; }

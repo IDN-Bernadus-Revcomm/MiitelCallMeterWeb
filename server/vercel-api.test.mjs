@@ -4,6 +4,8 @@ import session from '../api/session.js';
 import login from '../api/auth/login.js';
 import summary from '../api/summary.js';
 import logout from '../api/auth/logout.js';
+import customers from '../api/master/customers.js';
+import numbers from '../api/master/numbers.js';
 
 test('Vercel endpoints provide authenticated server-side proxy, never a client token',async()=>{
   const old={...process.env};
@@ -22,6 +24,7 @@ test('Vercel endpoints provide authenticated server-side proxy, never a client t
     assert.equal(state.configured,true);
     assert.equal(state.maxUploadBytes,4*1024*1024);
     assert.equal((await summary.fetch(new Request(base+'/api/summary'))).status,401);
+    assert.equal((await customers.fetch(new Request(base+'/api/master/customers'))).status,401);
     const signedIn=await login.fetch(new Request(base+'/api/auth/login',{
       method:'POST',headers:{'Content-Type':'application/json','Origin':base},body:JSON.stringify({token:access})
     }));
@@ -39,6 +42,15 @@ test('Vercel endpoints provide authenticated server-side proxy, never a client t
     const result=await summary.fetch(new Request(base+'/api/summary?company=demo-company',{headers:{cookie:signedCookie}}));
     assert.equal(result.status,200);
     assert.deepEqual(await result.json(),[{company_key:'demo-company'}]);
+    globalThis.fetch=async(url,options)=>{
+      assert.equal(url.href,'https://api.example.test/master/numbers?q=021&limit=25&offset=0');
+      assert.equal(options.headers.Authorization,'Bearer '+backend);
+      return Response.json({rows:[],hasMore:false});
+    };
+    const master=await numbers.fetch(new Request(base+'/api/master/numbers?q=021&limit=25&offset=0&unexpected=ignore',{headers:{cookie:signedCookie}}));
+    assert.equal(master.status,200);
+    assert.deepEqual(await master.json(),{rows:[],hasMore:false});
+    assert.equal((await numbers.fetch(new Request(base+'/api/master/numbers',{method:'POST',headers:{cookie:signedCookie}}))).status,405);
     const signedOut=await logout.fetch(new Request(base+'/api/auth/logout',{method:'POST',headers:{origin:base,cookie:signedCookie}}));
     assert.ok(signedOut.headers.get('Set-Cookie').includes('Max-Age=0'));
   }finally{

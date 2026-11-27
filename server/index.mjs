@@ -104,6 +104,14 @@ app.get('/api/cdrs',requireAuth,(req,res)=>{
   for(const key of ['company','status','limit','offset'])if(typeof req.query[key]==='string')qs.set(key,req.query[key]);
   return proxy(res,'call-charge/cdrs?'+qs);
 });
+for(const resource of ['customers','numbers']){
+  app.get('/api/master/'+resource,requireAuth,(req,res)=>{
+    if(demo)return res.json({rows:[],hasMore:false});
+    const qs=new URLSearchParams();
+    for(const key of ['q','limit','offset'])if(typeof req.query[key]==='string')qs.set(key,req.query[key]);
+    return proxy(res,'master/'+resource+'?'+qs);
+  });
+}
 const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:32*1024*1024,files:1,fields:2}});
 function uploadProxy(mode){
   return (req,res)=>{

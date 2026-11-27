@@ -72,6 +72,11 @@ export async function handleVercelRequest(request,route){
   }
   if(route==='logout'&&isPost)return reply({authenticated:false},200,{'Set-Cookie':sessionHeader('',0)});
   if(!authed)return reply({message:'Please sign in'},401);
+  if((route==='customers'||route==='numbers')&&request.method==='GET'){
+    const query=new URLSearchParams();
+    for(const key of ['q','limit','offset']){const value=url.searchParams.get(key);if(value!==null)query.set(key,value);}
+    return proxy(cfg,'master/'+route+'?'+query);
+  }
   if(route==='summary'&&request.method==='GET'){
     const query=new URLSearchParams();
     const company=url.searchParams.get('company');if(company)query.set('company',company);

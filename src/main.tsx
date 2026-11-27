@@ -4,12 +4,12 @@ import {
   Activity, ArrowDownToLine, ArrowDownRight, ArrowUpRight, BarChart3, Building2, CheckCircle2,
   ChevronDown, ChevronLeft, ChevronRight, CircleAlert, ClipboardList, CloudUpload, Database,
   FileSpreadsheet, Headphones, LayoutDashboard, LockKeyhole, LogOut, Menu, PhoneCall, RefreshCw,
-  Search, ShieldCheck, Wallet, X
+  Search, ShieldCheck, Users, Wallet, X
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import './styles.css';
 
-type Page = 'overview' | 'cdrs' | 'upload';
+type Page = 'overview' | 'cdrs' | 'upload' | 'customers' | 'numbers';
 type Amount = string | number | null | undefined;
 type Summary = {
   company_key: string; source_reference: string; first_source_call_at?: string; last_source_call_at?: string;
@@ -35,12 +35,48 @@ const money=(v:Amount) => v===null || v===undefined ? '—' : moneyFormat.format
 const percent=(v:number) => Number.isFinite(v) ? v.toFixed(1)+'%' : '—';
 const label=(s:string|null) => s ? s.replaceAll('_',' ').toLowerCase().replace(/^./,x=>x.toUpperCase()) : '—';
 const displayDate=(v?:string) => v ? new Date(v.replace(' ','T').slice(0,10)+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '—';
-const pageNames:Record<Page,string>={overview:'Overview',cdrs:'CDR Explorer',upload:'Upload CDR'};
+const pageNames:Record<Page,string>={overview:'Overview',cdrs:'CDR Explorer',upload:'Upload CDR',customers:'Customers',numbers:'Number Inventory'};
 const nav:{page:Page;label:string;icon:LucideIcon}[]=[
   {page:'overview',label:'Overview',icon:LayoutDashboard},
   {page:'cdrs',label:'CDR Explorer',icon:ClipboardList},
   {page:'upload',label:'Upload CDR',icon:CloudUpload},
+  {page:'customers',label:'Customers',icon:Users},
+  {page:'numbers',label:'Number Inventory',icon:PhoneCall},
 ];
+
+type CustomerMaster={id:string;customer_code:string;customer_name:string;legal_company_name:string|null;miitel_company_code:string|null;miitel_company_id:string|null;status:string;billing_cycle:string;activation_date:string|null};
+type NumberMaster={id:string;phone_number:string;normalized_number:string;number_type_code:string;number_type:string;vendor_code:string;vendor_name:string;country_name:string;area_code:string|null;status:string;ownership:string;assignment_status:string|null;customer_name:string|null;translation_numbers:unknown;translation_count:Amount;billing_increment_seconds:number|null};
+
+function masterStatus(status:string|null){return <span className={'badge '+(status==='active'||status==='assigned'?'green':'gray')}>{label(status)}</span>}
+function translationText(value:unknown):string {
+  if(value==null)return '—';
+  if(Array.isArray(value))return value.map(translationText).join(', ')||'—';
+  if(typeof value==='object'){const row=value as Record<string,unknown>;return String(row.translation_number??row.normalized_translation_number??row.phone_number??'—');}
+  return String(value)||'—';
+}
+
+function MasterList({kind,demo,revision}:{kind:'customers'|'numbers';demo:boolean;revision:number}){
+  const isCustomers=kind==='customers',limit=25;
+  const [query,setQuery]=useState(''),[search,setSearch]=useState(''),[offset,setOffset]=useState(0);
+  const [rows,setRows]=useState<(CustomerMaster|NumberMaster)[]>([]),[hasMore,setHasMore]=useState(false);
+  const [loading,setLoading]=useState(true),[error,setError]=useState(''),[retry,setRetry]=useState(0);
+  useEffect(()=>{let current=true;setLoading(true);setError('');setRows([]);setHasMore(false);
+    const params=new URLSearchParams({q:search,limit:String(limit),offset:String(offset)});
+    request<{rows:(CustomerMaster|NumberMaster)[];hasMore:boolean}>('/api/master/'+kind+'?'+params).then(result=>{if(current){setRows(result.rows);setHasMore(result.hasMore)}}).catch(err=>{if(current)setError(err instanceof Error?err.message:'Unable to load master data')}).finally(()=>{if(current)setLoading(false)});
+    return()=>{current=false};
+  },[kind,search,offset,retry,revision]);
+  function submit(e:React.FormEvent){e.preventDefault();setOffset(0);setSearch(query.trim());setRetry(n=>n+1)}
+  const columns=isCustomers?['Customer','MiiTel company','Billing cycle','Activation','Status']:['Number','Type / vendor','Customer / assignment','Translation number','Billing unit','Status'];
+  return <div className="page-stack"><div className="page-intro"><div><h1>{pageNames[kind]}</h1><p>{isCustomers?'Registered customer accounts and MiiTel company mapping.':'Registered numbers, vendor ownership, and translation mappings.'}</p></div><span className="badge blue"><Database size={15}/> Master data</span></div>
+    <section className="card table-card master-card"><div className="card-title"><div><h3>{isCustomers?'Customer directory':'Registered numbers'}</h3><p>Live records from the existing inventory.</p></div><span className="badge gray">Read only</span></div>
+      <form className="master-search" onSubmit={submit}><div className="master-search-input"><Search size={18}/><input aria-label="Search master data" maxLength={100} value={query} onChange={e=>setQuery(e.target.value)} placeholder={isCustomers?'Search name, code or MiiTel company':'Search number, vendor or customer'}/></div><button className="primary-button" type="submit">Search</button>{search&&<button type="button" className="outline-button" onClick={()=>{setQuery('');setSearch('');setOffset(0)}}>Clear</button>}</form>
+      {error&&<div className="master-state"><ErrorBox message={error} onRetry={()=>setRetry(n=>n+1)}/></div>}
+      {loading&&<div className="master-state loading-card"><Spinner/> Loading master data…</div>}
+      {!loading&&!error&&!rows.length&&<div className="master-state empty-card"><Search/><h3>No {isCustomers?'customers':'numbers'} found</h3><p>{demo?'Connect the live API to view registered master data.':'Try a different search or check your existing master records.'}</p></div>}
+      {rows.length>0&&<div className="table-scroll"><table><thead><tr>{columns.map(c=><th key={c}>{c}</th>)}</tr></thead><tbody>{isCustomers?(rows as CustomerMaster[]).map(r=><tr key={r.id}><td><div className="customer-cell"><div className="customer-avatar">{(r.customer_name||r.customer_code).slice(0,2).toUpperCase()}</div><div><strong>{r.customer_name}</strong><span>{r.customer_code}{r.legal_company_name&&r.legal_company_name!==r.customer_name?' · '+r.legal_company_name:''}</span></div></div></td><td><strong>{r.miitel_company_code||'—'}</strong><span className="cell-sub">{r.miitel_company_id??''}</span></td><td>{label(r.billing_cycle)}</td><td>{displayDate(r.activation_date??undefined)}</td><td>{masterStatus(r.status)}</td></tr>):(rows as NumberMaster[]).map((r,i)=><tr key={r.id+'-'+i}><td><strong>{r.phone_number}</strong><span className="cell-sub">{r.country_name||'—'}{r.area_code?' · '+r.area_code:''}</span></td><td><strong>{r.number_type||label(r.number_type_code)}</strong><span className="cell-sub">{r.vendor_name||r.vendor_code||'—'}</span></td><td><strong>{r.customer_name||'Unassigned'}</strong><span className="cell-sub">{label(r.assignment_status)}</span></td><td className="master-translation">{translationText(r.translation_numbers)}<span className="cell-sub">{num(r.translation_count)>0?count(r.translation_count)+' mapping(s)':''}</span></td><td>{r.billing_increment_seconds?`${r.billing_increment_seconds}s`:'—'}</td><td>{masterStatus(r.status)}</td></tr>)}</tbody></table></div>}
+      <div className="table-footer"><span>{rows.length?`Rows ${offset+1}–${offset+rows.length}`:'0 records on this page'}</span><div className="pagination"><button disabled={!offset||loading} className="icon-button" aria-label="Previous page" onClick={()=>setOffset(Math.max(0,offset-limit))}><ChevronLeft size={18}/></button><button disabled={!hasMore||loading} className="icon-button" aria-label="Next page" onClick={()=>setOffset(offset+limit)}><ChevronRight size={18}/></button></div></div>
+    </section></div>;
+}
 
 async function request<T>(url:string, options:RequestInit={}):Promise<T>{
   const response=await fetch(url,{credentials:'same-origin',cache:'no-store',...options});
@@ -170,6 +206,8 @@ function Workspace({session,onExit}:{session:Session;onExit:()=>void}){
   const [page,setPage]=useState<Page>(pageNames[initial]?initial:'overview');
   const [summary,setSummary]=useState<Summary[]>([]),[company,setCompany]=useState('all'),[loading,setLoading]=useState(true),[error,setError]=useState('');
   const [mobileOpen,setMobileOpen]=useState(false);
+  const [masterRevision,setMasterRevision]=useState(0);
+  const masterPage=page==='customers'||page==='numbers';
   const refresh=useCallback(async()=>{setLoading(true);setError('');try{setSummary(await request<Summary[]>('/api/summary'));}catch(err){setError(err instanceof Error?err.message:'Unable to load summary')}finally{setLoading(false)}},[]);
   useEffect(()=>{void refresh()},[refresh]);
   const companies=useMemo(()=>[...new Set(summary.map(r=>r.company_key))],[summary]);
@@ -178,11 +216,12 @@ function Workspace({session,onExit}:{session:Session;onExit:()=>void}){
   async function logout(){try{await request('/api/auth/logout',{method:'POST'});}finally{onExit()}}
   return <div className="app-shell">
     {mobileOpen&&<button className="mobile-overlay" aria-label="Close menu" onClick={()=>setMobileOpen(false)}/>}
-    <aside className={'sidebar '+(mobileOpen?'sidebar-open':'')}><Brand/><div className="sidebar-group"><span className="sidebar-label">WORKSPACE</span>{nav.map(item=><button key={item.page} className={'nav-item '+(page===item.page?'nav-active':'')} onClick={()=>go(item.page)}><item.icon size={21} strokeWidth={1.8}/><span>{item.label}</span>{page===item.page&&<span className="nav-dot"/>}</button>)}</div><div className="sidebar-bottom"><div className="side-info"><div className="side-info-icon"><Headphones size={20}/></div><div><strong>Call charge</strong><span>Focused workspace</span></div></div><div className="sidebar-mode"><span className="status-dot"/>{session.demo?'Local design demo':'Simulation only'}</div>{!session.demo&&<button className="nav-item logout-link" onClick={logout}><LogOut size={20}/>Sign out</button>}</div></aside>
-    <div className="main-shell"><header className="topbar"><div className="topbar-left"><button className="icon-button mobile-menu" aria-label="Open navigation" onClick={()=>setMobileOpen(true)}><Menu size={24}/></button><span className="breadcrumbs">CallMeter <span>/</span> <strong>{pageNames[page]}</strong></span></div><div className="topbar-right"><div className="mode-pill"><ShieldCheck size={16}/><span>{session.demo?'Demo data':'Simulation'}</span></div><button className="icon-button refresh-button" title="Refresh data" aria-label="Refresh data" onClick={refresh}><RefreshCw size={20} className={loading?'spin':''}/></button><div className="profile-avatar">CM</div></div></header><main className="content"><div className="toolbar"><div><span className="eyebrow">MIITEL CALLMETER</span><h2>{pageNames[page]}</h2></div><div className="company-control"><Building2 size={18}/><select aria-label="Filter customer" value={company} onChange={e=>setCompany(e.target.value)}><option value="all">All customers</option>{companies.map(c=><option key={c}>{c}</option>)}</select><ChevronDown size={16}/></div></div>
+    <aside className={'sidebar '+(mobileOpen?'sidebar-open':'')}><Brand/>{[{label:'WORKSPACE',items:nav.slice(0,3)},{label:'MASTER DATA',items:nav.slice(3)}].map(group=><div className="sidebar-group" key={group.label}><span className="sidebar-label">{group.label}</span>{group.items.map(item=><button key={item.page} className={'nav-item '+(page===item.page?'nav-active':'')} onClick={()=>go(item.page)}><item.icon size={21} strokeWidth={1.8}/><span>{item.label}</span>{page===item.page&&<span className="nav-dot"/>}</button>)}</div>)}<div className="sidebar-bottom"><div className="side-info"><div className="side-info-icon"><Headphones size={20}/></div><div><strong>Call charge</strong><span>Focused workspace</span></div></div><div className="sidebar-mode"><span className="status-dot"/>{session.demo?'Local design demo':'Simulation only'}</div>{!session.demo&&<button className="nav-item logout-link" onClick={logout}><LogOut size={20}/>Sign out</button>}</div></aside>
+    <div className="main-shell"><header className="topbar"><div className="topbar-left"><button className="icon-button mobile-menu" aria-label="Open navigation" onClick={()=>setMobileOpen(true)}><Menu size={24}/></button><span className="breadcrumbs">CallMeter <span>/</span> <strong>{pageNames[page]}</strong></span></div><div className="topbar-right"><div className="mode-pill"><ShieldCheck size={16}/><span>{session.demo?'Demo data':'Simulation'}</span></div><button className="icon-button refresh-button" title="Refresh data" aria-label="Refresh data" onClick={()=>masterPage?setMasterRevision(n=>n+1):void refresh()}><RefreshCw size={20} className={!masterPage&&loading?'spin':''}/></button><div className="profile-avatar">CM</div></div></header><main className="content"><div className="toolbar"><div><span className="eyebrow">MIITEL CALLMETER</span><h2>{pageNames[page]}</h2></div>{!masterPage&&<div className="company-control"><Building2 size={18}/><select aria-label="Filter customer" value={company} onChange={e=>setCompany(e.target.value)}><option value="all">All customers</option>{companies.map(c=><option key={c}>{c}</option>)}</select><ChevronDown size={16}/></div>}</div>
       {page==='overview'&&<Overview rows={filtered} loading={loading} error={error} company={company} demo={session.demo} onRetry={refresh} onExplore={c=>{setCompany(c);go('cdrs')}}/>}
       {page==='cdrs'&&<CdrExplorer companies={companies} company={company} demo={session.demo}/>}
       {page==='upload'&&<Upload company={company} importEnabled={session.importEnabled} demo={session.demo} maxUploadBytes={session.maxUploadBytes??32*1024*1024} onComplete={refresh}/>}
+      {masterPage&&<MasterList key={page} kind={page} demo={session.demo} revision={masterRevision}/>}
       <footer className="app-footer"><span>MiiTel CallMeter · Call charge management</span><span>Preview only · No invoice posting</span></footer>
     </main></div>
   </div>;
