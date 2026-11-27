@@ -12,6 +12,8 @@ const apiToken=process.env.BACKEND_API_TOKEN || '';
 const backend=process.env.BACKEND_URL || 'https://miitelcallmeterapi.onrender.com';
 const demo=process.env.DEMO_MODE === 'true' && process.env.NODE_ENV !== 'production' && host === '127.0.0.1';
 const configured=secret.length>=32 && apiToken.length>=32;
+const adminCandidate=process.env.ADMIN_ACCESS_TOKEN||'';
+const admin=adminCandidate.length>=32&&adminCandidate!==secret&&adminCandidate!==apiToken?adminCandidate:'';
 const importEnabled=process.env.ENABLE_CDR_IMPORT === 'true' && !demo;
 const cookieName='callmeter_session';
 const secureCookie=process.env.NODE_ENV==='production' || Boolean(process.env.RENDER);
@@ -31,7 +33,8 @@ app.use((req,res,next)=>{
 function readCookie(req){
   return (req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(cookieName+'='))?.slice(cookieName.length+1);
 }
-function signedIn(req){return demo || (configured && verifySession(readCookie(req),secret));}
+function adminIn(req){return configured&&Boolean(admin)&&verifySession(readCookie(req),admin);}
+function signedIn(req){return demo || (configured && (adminIn(req)||verifySession(readCookie(req),secret)));}
 function requireAuth(req,res,next){if(!signedIn(req))return res.status(401).json({message:'Please sign in'});next();}
 function sameOrigin(req,res,next){
   if(demo || !req.headers.origin)return next();
@@ -39,19 +42,20 @@ function sameOrigin(req,res,next){
   next();
 }
 app.get('/health',(_req,res)=>res.json({status:'ok',configured,ratingMode:'SIMULATION_ONLY'}));
-app.get('/api/session',(req,res)=>res.json({authenticated:signedIn(req),configured:configured||demo,demo,importEnabled,maxUploadBytes:32*1024*1024,deployment:'node'}));
+app.get('/api/session',(req,res)=>res.json({authenticated:signedIn(req),configured:configured||demo,demo,importEnabled,masterWriteEnabled:!demo&&adminIn(req),maxUploadBytes:32*1024*1024,deployment:'node'}));
 app.post('/api/auth/login',sameOrigin,(req,res)=>{
   if(!configured)return res.status(503).json({message:'Application access is not configured'});
   const key=req.ip||'unknown', now=Date.now();
   const old=loginAttempts.get(key);
   const record=old && old.until>now ? old : {count:0,until:now+10*60*1000};
   if(record.count>=5)return res.status(429).json({message:'Too many attempts. Try again in 10 minutes.'});
-  if(!equalSecret(req.body?.token,secret)){
+  const adminLogin=Boolean(admin)&&equalSecret(req.body?.token,admin);
+  if(!adminLogin&&!equalSecret(req.body?.token,secret)){
     record.count++; loginAttempts.set(key,record);
     return res.status(401).json({message:'Invalid access key'});
   }
   loginAttempts.delete(key);
-  res.cookie(cookieName,createSession(secret),cookieOptions);
+  res.cookie(cookieName,createSession(adminLogin?admin:secret),cookieOptions);
   res.json({authenticated:true});
 });
 app.post('/api/auth/logout',sameOrigin,(_req,res)=>{
@@ -108,10 +112,19 @@ for(const resource of ['customers','numbers']){
   app.get('/api/master/'+resource,requireAuth,(req,res)=>{
     if(demo)return res.json({rows:[],hasMore:false});
     const qs=new URLSearchParams();
-    for(const key of ['q','limit','offset'])if(typeof req.query[key]==='string')qs.set(key,req.query[key]);
+    for(const key of ['q','limit','offset',...(resource==='customers'?['status']:[])])if(typeof req.query[key]==='string')qs.set(key,req.query[key]);
     return proxy(res,'master/'+resource+'?'+qs);
   });
 }
+app.post('/api/master/customers',sameOrigin,requireAuth,(req,res)=>{
+  if(demo||!adminIn(req))return res.status(403).json({message:'Admin access required'});
+  return proxy(res,'master/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(req.body)});
+});
+app.get('/api/master/number-details',requireAuth,(req,res)=>{
+  if(demo)return res.status(404).json({message:'Number not found'});
+  const qs=new URLSearchParams();if(typeof req.query.id==='string')qs.set('id',req.query.id);
+  return proxy(res,'master/number-details?'+qs);
+});
 const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:32*1024*1024,files:1,fields:2}});
 function uploadProxy(mode){
   return (req,res)=>{

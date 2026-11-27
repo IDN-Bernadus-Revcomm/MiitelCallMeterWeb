@@ -17,8 +17,9 @@ function sessionHeader(value,maxAge){
 function config(){
   const secret=process.env.APP_ACCESS_TOKEN||'';
   const apiToken=process.env.BACKEND_API_TOKEN||'';
+  const admin=process.env.ADMIN_ACCESS_TOKEN||'';
   return {
-    secret,apiToken,configured:secret.length>=32&&apiToken.length>=32,
+    secret,apiToken,admin:admin.length>=32&&admin!==secret&&admin!==apiToken?admin:'',configured:secret.length>=32&&apiToken.length>=32,
     backend:process.env.BACKEND_URL||'https://miitelcallmeterapi.onrender.com',
     importEnabled:process.env.ENABLE_CDR_IMPORT==='true',
     // Reserve space for multipart overhead below Vercel's request limit.
@@ -46,12 +47,13 @@ async function proxy(cfg,path,options={}){
 export async function handleVercelRequest(request,route){
   const cfg=config();
   const url=new URL(request.url);
-  const authed=cfg.configured&&verifySession(cookieValue(request),cfg.secret);
+  const isAdmin=cfg.configured&&Boolean(cfg.admin)&&verifySession(cookieValue(request),cfg.admin);
+  const authed=cfg.configured&&(isAdmin||verifySession(cookieValue(request),cfg.secret));
   const isPost=request.method==='POST';
   const origin=request.headers.get('origin');
   if(isPost&&origin&&origin!==url.origin)return reply({message:'Origin not allowed'},403);
   if(route==='session'&&request.method==='GET')return reply({
-    authenticated:authed,configured:cfg.configured,demo:false,
+    authenticated:authed,configured:cfg.configured,demo:false, masterWriteEnabled:isAdmin,
     importEnabled:cfg.importEnabled,maxUploadBytes:cfg.maxUploadBytes,deployment:'vercel'
   });
   if(route==='health'&&request.method==='GET')return reply({status:'ok',configured:cfg.configured,ratingMode:'SIMULATION_ONLY'});
@@ -63,18 +65,29 @@ export async function handleVercelRequest(request,route){
     const record=previous&&previous.until>now?previous:{count:0,until:now+10*60*1000};
     if(record.count>=5)return reply({message:'Too many attempts. Try again in 10 minutes.'},429);
     const body=await request.json().catch(()=>null);
-    if(!equalSecret(body?.token,cfg.secret)){
+    const adminLogin=Boolean(cfg.admin)&&equalSecret(body?.token,cfg.admin);
+    if(!adminLogin&&!equalSecret(body?.token,cfg.secret)){
       record.count++;attempts.set(key,record);
       return reply({message:'Invalid access key'},401);
     }
     attempts.delete(key);
-    return reply({authenticated:true},200,{'Set-Cookie':sessionHeader(createSession(cfg.secret),expires)});
+    return reply({authenticated:true},200,{'Set-Cookie':sessionHeader(createSession(adminLogin?cfg.admin:cfg.secret),expires)});
   }
   if(route==='logout'&&isPost)return reply({authenticated:false},200,{'Set-Cookie':sessionHeader('',0)});
   if(!authed)return reply({message:'Please sign in'},401);
+  if(route==='number-details'&&request.method==='GET'){
+    const query=new URLSearchParams();const id=url.searchParams.get('id');if(id!==null)query.set('id',id);
+    return proxy(cfg,'master/number-details?'+query);
+  }
+  if(route==='customers'&&isPost){
+    if(!isAdmin)return reply({message:'Admin access required'},403);
+    const body=await request.json().catch(()=>null);
+    if(!body||typeof body!=='object'||Array.isArray(body))return reply({message:'Invalid customer data'},400);
+    return proxy(cfg,'master/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  }
   if((route==='customers'||route==='numbers')&&request.method==='GET'){
     const query=new URLSearchParams();
-    for(const key of ['q','limit','offset']){const value=url.searchParams.get(key);if(value!==null)query.set(key,value);}
+    for(const key of ['q','limit','offset',...(route==='customers'?['status']:[])]){const value=url.searchParams.get(key);if(value!==null)query.set(key,value);}
     return proxy(cfg,'master/'+route+'?'+query);
   }
   if(route==='summary'&&request.method==='GET'){

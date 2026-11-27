@@ -31,6 +31,14 @@ HttpOnly sessions. Configure identity-based user authorization before
 production use. The dashboard clearly labels database results as simulations.
 Import is disabled initially and must be enabled explicitly on both services.
 
+Customer profiles can be created or edited from Customers, including creating
+a customer directly from Upload CDR. Set a distinct `ADMIN_ACCESS_TOKEN`
+(minimum 32 characters) on the web service and `MASTER_WRITE_ENABLED=true`
+on the backend only when enabling writes. Sign in using the admin key to
+edit; the existing workspace key can view only. This is a temporary shared
+admin credential, not individual-user RBAC. No lifecycle status changes,
+number assignments, or identity changes are exposed by these forms.
+
 ## Deploy to Vercel
 
 Use the **Vite** framework preset. The repository includes `vercel.json`

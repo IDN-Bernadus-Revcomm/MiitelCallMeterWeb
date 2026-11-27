@@ -12,9 +12,11 @@ test('Vercel endpoints provide authenticated server-side proxy, never a client t
   const oldFetch=globalThis.fetch;
   const access='local-test-access-key-not-a-deployed-secret';
   const backend='local-test-backend-key-not-a-deployed-secret';
+  const admin='local-test-admin-key-not-a-deployed-secret';
   try{
     process.env.APP_ACCESS_TOKEN=access;
     process.env.BACKEND_API_TOKEN=backend;
+    process.env.ADMIN_ACCESS_TOKEN=admin;
     process.env.BACKEND_URL='https://api.example.test';
     const base='https://frontend.example.test';
     const initial=await session.fetch(new Request(base+'/api/session'));
@@ -51,6 +53,16 @@ test('Vercel endpoints provide authenticated server-side proxy, never a client t
     assert.equal(master.status,200);
     assert.deepEqual(await master.json(),{rows:[],hasMore:false});
     assert.equal((await numbers.fetch(new Request(base+'/api/master/numbers',{method:'POST',headers:{cookie:signedCookie}}))).status,405);
+    assert.equal((await customers.fetch(new Request(base+'/api/master/customers',{method:'POST',headers:{cookie:signedCookie,'Content-Type':'application/json'},body:'{}'}))).status,403);
+    const adminLogin=await login.fetch(new Request(base+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json',origin:base},body:JSON.stringify({token:admin})}));
+    const adminCookie=adminLogin.headers.get('Set-Cookie').split(';')[0];
+    assert.equal((await (await session.fetch(new Request(base+'/api/session',{headers:{cookie:adminCookie}}))).json()).masterWriteEnabled,true);
+    globalThis.fetch=async(url,options)=>{
+      assert.equal(url.href,'https://api.example.test/master/customers');assert.equal(options.method,'POST');assert.equal(options.headers.Authorization,'Bearer '+backend);
+      return Response.json({id:'demo'});
+    };
+    const saved=await customers.fetch(new Request(base+'/api/master/customers',{method:'POST',headers:{cookie:adminCookie,origin:base,'Content-Type':'application/json'},body:JSON.stringify({customer_name:'Demo'})}));
+    assert.equal(saved.status,200);
     const signedOut=await logout.fetch(new Request(base+'/api/auth/logout',{method:'POST',headers:{origin:base,cookie:signedCookie}}));
     assert.ok(signedOut.headers.get('Set-Cookie').includes('Max-Age=0'));
   }finally{
