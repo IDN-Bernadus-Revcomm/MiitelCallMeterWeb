@@ -140,6 +140,11 @@ svg { flex-shrink: 0; }
 .field>span { font-size:13px; font-weight:700; color:#526b7b; }
 .inventory-filters { margin:0 22px 18px; padding:13px 15px; background:#f8fbfd; border:1px solid var(--border); border-radius:10px; }
 .inventory-filters summary { cursor:pointer; font-weight:700; color:#29445a; margin-bottom:10px; }
+.pricing-form { max-width:1000px; }
+.pricing-section { margin:18px 0; border:1px solid var(--border); border-radius:12px; padding:16px; background:#f9fcfe; }
+.pricing-section h4 { margin:0 0 14px; color:#29445a; font-size:16px; font-weight:700; }
+.pricing-section>.field { margin-bottom:12px; }
+.pricing-section .number-detail-grid { margin-top:16px; margin-bottom:0; }
 .table-scroll { overflow:auto; width:100%; }
 table { border-collapse:collapse; min-width:710px; width:100%; font-size:13px; color:#516a7a; white-space:nowrap; }
 thead { background:#f5f9fc; color:#6e8190; }

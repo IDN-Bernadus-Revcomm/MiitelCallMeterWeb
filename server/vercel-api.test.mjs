@@ -68,6 +68,10 @@ test('Vercel endpoints provide authenticated server-side proxy, never a client t
     assert.equal((await masterWorkspace.fetch(new Request(actionUrl,{method:'POST',headers:{cookie:signedCookie,'Content-Type':'application/json'},body:'{}'}))).status,403);
     globalThis.fetch=async(url,options)=>{assert.equal(url.href,'https://api.example.test/master/number-actions');assert.equal(options.method,'POST');return Response.json({id:'demo'});};
     assert.equal((await masterWorkspace.fetch(new Request(actionUrl,{method:'POST',headers:{cookie:adminCookie,'Content-Type':'application/json'},body:'{}'}))).status,200);
+    const pricingUrl=base+'/api/master/workspace?resource=pricing-save';
+    assert.equal((await masterWorkspace.fetch(new Request(pricingUrl,{method:'POST',headers:{cookie:signedCookie,'Content-Type':'application/json'},body:'{}'}))).status,403);
+    globalThis.fetch=async(url,options)=>{assert.equal(url.href,'https://api.example.test/master/pricing-save');assert.equal(options.method,'POST');return Response.json({id:'demo',status:'inactive'});};
+    assert.equal((await masterWorkspace.fetch(new Request(pricingUrl,{method:'POST',headers:{cookie:adminCookie,'Content-Type':'application/json'},body:'{}'}))).status,200);
     assert.equal((await masterWorkspace.fetch(new Request(base+'/api/master/workspace?resource=unknown',{headers:{cookie:adminCookie}}))).status,405);
     const signedOut=await logout.fetch(new Request(base+'/api/auth/logout',{method:'POST',headers:{origin:base,cookie:signedCookie}}));
     assert.ok(signedOut.headers.get('Set-Cookie').includes('Max-Age=0'));

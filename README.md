@@ -40,8 +40,9 @@ admin credential, not individual-user RBAC. No lifecycle status changes,
 number identity changes are exposed by the customer forms. Number Inventory
 supports registration, lifecycle updates, assign/release, and translation
 creation/closure using the existing database triggers. Vendor profiles are
-editable; call rate cards and discount catalogs are read-only pending rate
-validation review.
+editable; call rate cards and customer discounts can be registered as inactive
+drafts or new revisions after the database guard migration 010A is applied.
+Existing rate records remain unchanged. Activation is not exposed.
 
 ## Deploy to Vercel
 
