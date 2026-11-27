@@ -95,8 +95,8 @@ export async function handleVercelRequest(request,route){
       const body=await request.json().catch(()=>null);if(!body||typeof body!=='object'||Array.isArray(body))return reply({message:'Invalid number data'},400);
       return proxy(cfg,'master/'+resource,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     }
-    if(request.method!=='GET'||!['number-options','area-options','catalog','pricing-options','pricing-record','active-cdrs'].includes(resource))return reply({message:'Method not allowed'},405);
-    const query=new URLSearchParams();for(const key of ['q','country','kind','status','limit','offset','id','company','assume_jakarta','direction']){const value=url.searchParams.get(key);if(value!==null)query.set(key,value);}
+    if(request.method!=='GET'||!['number-options','area-options','catalog','pricing-options','pricing-record','active-cdrs','gp-options','gp-estimate'].includes(resource))return reply({message:'Method not allowed'},405);
+    const query=new URLSearchParams();for(const key of ['q','country','kind','status','limit','offset','id','company','assume_jakarta','direction','month','rate_code','assume_legacy']){const value=url.searchParams.get(key);if(value!==null)query.set(key,value);}
     return proxy(cfg,'master/'+resource+'?'+query);
   }
   if(route==='number-details'&&request.method==='GET'){

@@ -133,9 +133,11 @@ app.get('/api/master/workspace',requireAuth,(req,res)=>{
     const qs=new URLSearchParams();for(const key of ['company','q','status','limit','offset'])if(typeof req.query[key]==='string')qs.set(key,req.query[key]);
     return proxy(res,'cdr/import-history?'+qs);
   }
-  if(!['number-options','area-options','catalog','pricing-options','pricing-record','active-cdrs'].includes(resource))return res.status(405).json({message:'Method not allowed'});
+  if(!['number-options','area-options','catalog','pricing-options','pricing-record','active-cdrs','gp-options','gp-estimate'].includes(resource))return res.status(405).json({message:'Method not allowed'});
+  if(demo&&resource==='gp-options')return res.json({companies:[],months:[],rates:[],ready:false});
+  if(demo&&resource==='gp-estimate')return res.status(503).json({message:'Connect live API to calculate a report'});
   if(demo)return res.json(resource==='catalog'||resource==='active-cdrs'?{rows:[],hasMore:false}:resource==='area-options'?[]:resource==='pricing-record'?null:{vendors:[],types:[],countries:[],variants:[],grades:[],customers:[],teams:[],migrationOptions:[],destinations:[],zones:[],numbers:[],areas:[],sources:[],standard:[],draftProtectionReady:false});
-  const qs=new URLSearchParams();for(const key of ['q','country','kind','status','limit','offset','id','company','assume_jakarta','direction'])if(typeof req.query[key]==='string')qs.set(key,req.query[key]);
+  const qs=new URLSearchParams();for(const key of ['q','country','kind','status','limit','offset','id','company','assume_jakarta','direction','month','rate_code','assume_legacy'])if(typeof req.query[key]==='string')qs.set(key,req.query[key]);
   return proxy(res,'master/'+resource+'?'+qs);
 });
 app.post('/api/master/workspace',sameOrigin,requireAuth,(req,res)=>{

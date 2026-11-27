@@ -79,6 +79,9 @@ test('Vercel endpoints provide authenticated server-side proxy, never a client t
     assert.equal((await masterWorkspace.fetch(new Request(ratingUrl,{method:'POST',headers:{cookie:signedCookie,'Content-Type':'application/json'},body:'{}'}))).status,200);
     globalThis.fetch=async(url,options)=>{assert.equal(url.href,'https://api.example.test/master/active-cdrs?limit=25&company=demo-company&assume_jakarta=false');assert.equal(options.method,undefined);return Response.json({rows:[],hasMore:false});};
     assert.equal((await masterWorkspace.fetch(new Request(base+'/api/master/workspace?resource=active-cdrs&company=demo-company&limit=25&assume_jakarta=false',{headers:{cookie:signedCookie}}))).status,200);
+    globalThis.fetch=async(url,options)=>{assert.equal(url.href,'https://api.example.test/master/gp-estimate?company=demo-company&direction=outbound&month=2026-08&rate_code=V-001&assume_legacy=true');assert.equal(options.headers.Authorization,'Bearer '+backend);return Response.json({estimated_gross_profit:100});};
+    const gp=await masterWorkspace.fetch(new Request(base+'/api/master/workspace?resource=gp-estimate&company=demo-company&month=2026-08&direction=outbound&rate_code=V-001&assume_legacy=true&unexpected=ignored',{headers:{cookie:signedCookie}}));
+    assert.equal(gp.status,200);assert.deepEqual(await gp.json(),{estimated_gross_profit:100});
     globalThis.fetch=async(url)=>{assert.equal(url.href,'https://api.example.test/cdr/import-history?company=demo-company&limit=25');return Response.json({rows:[],hasMore:false,historyReady:true});};
     assert.equal((await masterWorkspace.fetch(new Request(base+'/api/master/workspace?resource=import-history&company=demo-company&limit=25',{headers:{cookie:signedCookie}}))).status,200);
     const prod='https://miitel-call-meter-web.vercel.app';process.env.BACKEND_URL='https://miitelcallmeterapi.onrender.com';process.env.ENABLE_CDR_IMPORT='true';
